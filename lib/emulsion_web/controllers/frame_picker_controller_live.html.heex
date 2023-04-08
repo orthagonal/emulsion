@@ -1,0 +1,63 @@
+<div :if={@mode == :select_working_dir}>
+  <h1 class="text-3xl font-bold opacity-100">
+    Mode: <%= @mode %>
+    <form phx-submit="select_working_dir">
+      <input type="text">
+      <input type="submit" value="Submit">      
+    </form>
+  </h1>
+</div>
+
+<div :if={@mode != :select_working_dir} >
+  <div class="border-2">
+    <h1 class="text-3xl font-bold opacity-100">
+      Mode: <%= @mode %>
+    </h1>
+    <button class="border-2 shadow-lg" phx-click="want_to_select_source">
+      Select Source Frame
+    </button>
+    <button class="border-2 shadow-lg" phx-click="want_to_select_dest">
+      Select Dest Frame
+    </button>  
+    <button class="border-2 shadow-lg" phx-click="generate_tween">
+      Join Frames
+    </button>
+  </div>
+
+  <div class="h-screen flex">
+    <div id="left-column" class="flex-vertical">
+      <div class="flex">
+        <div class="border-2" phx-click="want_to_select_source">
+          <h1 class="text-3xl font-bold text-gray" >
+            Source Frame
+          </h1>
+          <img class="" src={@srcFrame} alt="background image">
+        </div>
+
+        <div class="border-2" phx-click="want_to_select_dest">
+          <h1 class="">
+            Dest Frame
+          </h1>
+          <img class="" src={@destFrame} alt="background image">
+        </div>
+      </div>
+
+    </div>
+
+    <div id="right-column" class="flex-1 flex overflow-hidden h-30">
+      <div class="flex-1 overflow-y-scroll grid grid-cols-4">
+        <div :for={thumb <- @thumbFiles} class="border-2" phx-click="click_frame", phx-value-frame={thumb}>
+          <img src={thumb}>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button class="border-2 shadow-lg" phx-click="toggle_video_preview">
+    Toggle Video Preview
+  </button>
+  <div if={@videoPreviewVisible}>
+    <video id="video" controls autoplay src={"/file/" <> @videoPath}>
+    </video>
+  </div>
+</div>
