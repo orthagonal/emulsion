@@ -1,7 +1,7 @@
 # handles generating the playgraph for the scene
 # and eventually connecting playgraphs together
 
-defmodule Emulsion.Playgraph do
+defmodule Emulsion do
 #   # @workingDir "MVI_5830"
 #   # thumbs_dir "MVI_5830/thumbs"
 #   # @framesDir "MVI_5830/frames"

@@ -1,0 +1,26 @@
+{
+	"folders": [
+		{
+			"path": "../ghostidle_previous"
+		},
+		{
+			"path": "../ghostidle"
+		},
+		{
+			"path": "../rife"
+		},
+		{
+			"path": "../taurkovsky"
+		},
+		{
+			"path": "../taurkovsky/control_panel"
+		},
+		{
+			"path": "../engine"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {}
+}

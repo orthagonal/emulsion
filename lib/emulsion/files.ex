@@ -7,6 +7,13 @@ defmodule Emulsion.Files do
   # specify using lowercase
   @frameExtension ".png"
 
+  # i'll use this to select files
+  def list_dir(dir) do
+    dir
+    |> Path.expand()
+    |> File.ls!()
+  end
+
   # functions for resolving filenames and directories
   # anyone can call these directly
   def app_dir do "e:/GitHub/emulsion" end
@@ -71,11 +78,18 @@ defmodule Emulsion.Files do
   # frame_0001.png -> frame_
   def frame_base framePath do
     # get the first file in the frames directory
-    firstFileInDirectory = File.ls!(framePath) |> List.first()
-    Path.basename(firstFileInDirectory)
-      |> String.split("_") |> List.first()
-      # split and remove after the first number
-      |> String.replace(~r/\d.*/, "")
+    firstFileInDirectory = File.ls!(framePath) |> List.first() |> Path.basename()
+    case String.contains?(firstFileInDirectory, "_") do
+      true ->
+        base = firstFileInDirectory
+          |> String.split("_") |> List.first()
+          # split and remove after the first number
+          |> String.replace(~r/\d.*/, "")
+        # add it back to the end
+        base <> "_"
+      false -> firstFileInDirectory
+        |> String.replace(~r/\d.*/, "")
+    end
   end
 
   # turn a frame number into the full path for that frame png in the frame dir
