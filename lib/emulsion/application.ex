@@ -13,6 +13,7 @@ defmodule Emulsion.Application do
       { Emulsion.Files, name: :fileServer },
       { Emulsion.Video, name: :videoServer },
       { Emulsion.NotifyWhenDone, name: :notifyWhenDone},
+      { Emulsion.NotifyWhenCreated, name: :notifyWhenCreated},
       # Start the Ecto repository
       Emulsion.Repo,
       # Start the PubSub system

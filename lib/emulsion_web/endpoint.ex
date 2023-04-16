@@ -1,3 +1,4 @@
+
 defmodule EmulsionWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :emulsion
 
@@ -26,8 +27,8 @@ defmodule EmulsionWeb.Endpoint do
   # serves from the project root directory
   plug Plug.Static,
     at: "/file",
-    from: "/e/emulsion_workspace",
-    # from: GenServer.call(Emulsion.Files, {:get_working_dir}),
+    # absoute form?
+    from: "e:/emulsion_workspace",
     gzip: false
 
   # Code reloading can be explicitly enabled under the

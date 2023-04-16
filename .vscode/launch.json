@@ -6,22 +6,13 @@
   "configurations": [
     {
       "type": "mix_task",
-      "name": "mix (Default task)",
+      "name": "mix Phoenix Server",
       "request": "launch",
-      "projectDir": "${workspaceRoot}"
-    },
-    {
-      "type": "mix_task",
-      "name": "mix test",
-      "request": "launch",
+      // run this in the emulsion directory
       "task": "mix",
-      "taskArgs": ["test", "test/videoProcessing.exs"],
+      "taskArgs": ["phx.server"],
       "startApps": true,
-      "projectDir": "${workspaceRoot}",
-      "requireFiles": [
-        "test/**/test_helper.exs",
-        "test/**/*_test.exs"
-      ]
+      "projectDir": "${workspaceRoot}"
     }
   ]
 }

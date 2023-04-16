@@ -1,31 +1,37 @@
-# test all the things involving managing a ghostidle and it's workspace
-
 defmodule EmulsionWeb.FilesTest do
   use EmulsionWeb.ConnCase
 
   @tag timeout: :infinity
 
-  test "sets and creates the working directory" do
-    videoFile = "e:/intro/MVI_5945.MOV"
-    res = GenServer.call(Emulsion.Files, :get_working_dir)
-    GenServer.cast(Emulsion.Files, {:set_working_dir, videoFile})
-    res = GenServer.call(Emulsion.Files, :get_working_dir)
-    assert res == "e:/emulsion_workspace/MVI_5945"
-  end
+  # test "sets and creates the working directory" do
+  #   videoFile = "e:/intro/MVI_5945.MOV"
+  #   res = GenServer.call(Emulsion.Files, :get_working_dir)
+  #   GenServer.cast(Emulsion.Files, {:set_working_dir, videoFile})
+  #   res = GenServer.call(Emulsion.Files, :get_working_dir)
+  #   assert res == "e:/emulsion_workspace/MVI_5945"
+  # end
 
-  test "takes a source video and makes a working dir for it" do
-    videoFile = "e:/intro/MVI_5945.MOV"
-    GenServer.cast(Emulsion.Files, {:set_working_dir, videoFile})
-    res = GenServer.call(Emulsion.Files, :get_working_dir)
-    IO.inspect res
-    assert res == "e:/emulsion_workspace/MVI_5945"
-    thumbs_dir = GenServer.call(Emulsion.Files, :get_thumbs_dir)
-    assert thumbs_dir == "e:/emulsion_workspace/MVI_5945/thumbs"
-    framesDir = GenServer.call(Emulsion.Files, :get_frames_dir)
-    assert framesDir == "e:/emulsion_workspace/MVI_5945/frames"
-  end
+  # test "takes a source video and makes a working dir for it" do
+  #   videoFile = "e:/intro/MVI_5945.MOV"
+  #   GenServer.cast(Emulsion.Files, {:set_working_dir, videoFile})
+  #   res = GenServer.call(Emulsion.Files, :get_working_dir)
+  #   IO.inspect res
+  #   assert res == "e:/emulsion_workspace/MVI_5945"
+  #   thumbs_dir = GenServer.call(Emulsion.Files, :get_thumbs_dir)
+  #   assert thumbs_dir == "e:/emulsion_workspace/MVI_5945/thumbs"
+  #   framesDir = GenServer.call(Emulsion.Files, :get_frames_dir)
+  #   assert framesDir == "e:/emulsion_workspace/MVI_5945/frames"
+  # end
 
-    # test "can take in a thumb path in the browser form and convert it to a path that can be used in the shell" do
+    # test "can list out the files in the thumbs directory after setting the working path" do
+    #   videoFile = "e:/intro/MVI_5852.MOV"
+    #   GenServer.cast(Emulsion.Files, {:set_working_dir, videoFile})
+    #   list_of_thumbs = GenServer.call(Emulsion.Files, {:get_list_of_thumbs})
+    #   IO.inspect list_of_thumbs
+    # end
+
+
+  # test "can take in a thumb path in the browser form and convert it to a path that can be used in the shell" do
   #   videoFile = "e:/intro/MVI_5820.MOV"
   #   GenServer.cast(Emulsion.Files, {:set_working_dir, videoFile})
   #   filepath = "/file/thumbs/frame_0706.png"

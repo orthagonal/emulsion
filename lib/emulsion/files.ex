@@ -4,6 +4,22 @@
 defmodule Emulsion.Files do
   use GenServer
 
+  @resourceTypes [:workspace_folder, :frame_folder, :thumbs_folder, :tween_folder :output_folder]
+  # dir structure looks like:
+  # workspace_folder
+  #   frame_folder
+  #   thumbs_folder
+  #   tween_folders (one for each tween we generate)
+  #   output_folder
+
+  @pathTypes [:browser, :disk]
+
+  @operations [
+    :set_workspace_folder,
+    :get_file_list, # returns a list of files in a directory
+    :get_file_from_directory, # returns a file from a directory
+  ]
+
   # specify using lowercase
   @frameExtension ".png"
 
@@ -32,14 +48,13 @@ defmodule Emulsion.Files do
 
   def video_extension do "webm" end
   def frame_extension do "png" end
-  def get_full_tween_path srcFrame, dstFrame do
-    tweenName = Path.join([working_dir_browser(), make_tween_name(srcFrame, dstFrame) <> ".webm"])
-  end
+
+  def add_video_extension base do base <> "." <> video_extension end
+
   # make a tween name for a source and a destination frame
   def make_tween_name(src_frame, dest_frame) when is_integer(src_frame) and is_integer(dest_frame) do
     "#{src_frame}_to_#{dest_frame}"
   end
-
   def make_tween_name(src_frame, dest_frame) do
     src_base = Path.basename(src_frame)
       |> String.downcase(:default)
@@ -48,9 +63,24 @@ defmodule Emulsion.Files do
     dest_base = Path.basename(dest_frame) |> String.downcase() |> String.replace(@frameExtension, "") |> String.replace("frame_", "")
     tween_name = src_base <> "_to_" <> dest_base
   end
-  def get_path_to_tween_frames(working_path, start_frame, end_frame) do
+  def get_path_to_tween_frames(working_path, start_frame, end_frame) when is_integer(start_frame) and is_integer(end_frame) do
     Path.join([working_path, "#{start_frame}_to_#{end_frame}"])
   end
+
+  def get_path_to_tween_frames(working_path, start_frame, end_frame) do
+    # strip out everything except the index of the img
+    # images are in img_0001.png format
+    start_frame_as_integer = start_frame
+      |> Path.basename()
+      |> String.replace(@frameExtension, "")
+      |> String.replace("frame_", "")
+    end_frame_as_integer = end_frame
+      |> Path.basename()
+      |> String.replace(@frameExtension, "")
+      |> String.replace("frame_", "")
+    Path.join([working_path, make_tween_name(start_frame_as_integer, end_frame_as_integer)])
+  end
+
   def get_output_tween_video(working_path, src_frame, dest_frame) do
     Path.join([
       output_dir(working_path),
@@ -59,9 +89,9 @@ defmodule Emulsion.Files do
   end
 
   # convert a thumb from the browser to its full sized path in the shell
-  def browserThumbToShellFrame(videoPath, thumb) do
-    Path.join([frames_dir(videoPath), String.replace(thumb, "/file/thumbs/", "")])
-  end
+  # def browserThumbToShellFrame(videoPath, thumb) do
+  #   Path.join([frames_dir(videoPath), String.replace(thumb, "/file/thumbs/", "")])
+  # end
 
   # convert a windows path to linux path
   # really really need to sort this out so it 'just works' in both places
@@ -69,6 +99,11 @@ defmodule Emulsion.Files do
   def windows_to_linux_path path do
     String.replace(path, "\\", "/")
     |> String.replace("e:", "/e")
+  end
+
+  # todo?  this bleeds file
+  def frames_and_thumbs_exist? videoPath, thumbsPath do
+    File.ls!(videoPath) |> Enum.count() > 0 and File.ls!(thumbsPath) |> Enum.count() > 0
   end
 
   # get the 'basis' name of the frames in the frames directory
@@ -92,14 +127,6 @@ defmodule Emulsion.Files do
     end
   end
 
-  # turn a frame number into the full path for that frame png in the frame dir
-  def get_image_for_frameNum(working_path, frameNum) do
-    framesDir = frames_dir(working_path)
-    frameFileName = frame_base(framesDir) <> String.pad_leading("#{frameNum}", 4, "0") <> @frameExtension
-    Path.join([framesDir, frameFileName ])
-  end
-
-
   # actual genserver stuff, used by clients to store state about the current workspace
   def init(init_state) do
     {:ok, %{ working_dir: "" }}
@@ -112,33 +139,24 @@ defmodule Emulsion.Files do
     {:reply, app_dir(), state}
   end
 
-  # set the working directory to a specific video`
-  # right now a 'working directory' corresponds to a single video file
-  def handle_cast({:set_working_dir, videoPath}, state) do
-    # get the name of the video file
-    # make a directory for the video
-    File.mkdir(working_dir(videoPath))
-    # make a directory for the frames
-    File.mkdir(frames_dir(videoPath))
-    # make a directory for the thumbs
-    File.mkdir(thumbs_dir(videoPath))
-    # make a directory for all output videos
-    File.mkdir(output_dir(videoPath))
-
-    newState = Map.merge(state, %{
-      working_dir: working_dir(videoPath),
-      frames_dir: frames_dir(videoPath),
-      thumbs_dir: thumbs_dir(videoPath),
-      output_dir: output_dir(videoPath),
-      videoPath: videoPath
-    })
-    {:noreply, newState}
-  end
 
   # get the current working directory
-  def handle_call(:get_working_dir, _from, state) do
-    dir = state |> Map.get(:working_dir) |> working_dir
+  def handle_call({:get_working_dir}, _from, state) do
+    dir = state |> Map.get(:workspace_folder) |> working_dir
     {:reply, dir, state }
+  end
+  def handle_call(:get_working_dir, _from, state) do
+    dir = state |> Map.get(:workspace_folder) |> working_dir
+    {:reply, dir, state }
+  end
+
+  # translates a frame from a thumbnail
+  def handle_call({:get_frame_from_thumb, thumbBrowserPath}, _from, state) do
+    # browser path looks like "/file/MVI_blahblah/thumbs/img_0001.png"
+    # change it to be the frames directory in the working directory
+    working_dir = state |> Map.get(:workspace_folder)
+    result = Path.join([working_dir, "frames", Path.basename(thumbBrowserPath)])
+    {:reply, result, state}
   end
 
   # get the path to the original video file that is currently being worked on
@@ -149,12 +167,12 @@ defmodule Emulsion.Files do
   # get the path to the frames directory for the video that is currently being worked on
   # this is a directory with all the frames of the video in an image format
   def handle_call(:get_frames_dir, _from, state) do
-    dir = state |> Map.get(:working_dir) |> frames_dir
+    dir = state |> Map.get(:workspace_folder) |> frames_dir
     {:reply, dir, state }
   end
 
   def handle_call(:get_output_dir, _from, state) do
-    dir = state |> Map.get(:working_dir) |> output_dir
+    dir = state |> Map.get(:workspace_folder) |> output_dir
     {:reply, dir, state }
   end
 
@@ -171,74 +189,50 @@ defmodule Emulsion.Files do
     Path.join([output_dir(working_dir), get_sequential_output_video_name(start_frame, end_frame)])
   end
 
+  # these translate an image number to a frame number
+  def get_image_for_frameNum(working_path, frame_number) when is_binary(frame_number) do
+    IO.puts "getting binary frame #{frame_number}"
+    framesDir = frames_dir(working_path)
+    IO.puts "framesDir: #{framesDir}"
+    frameFileName = frame_base(framesDir) <> frame_number
+    Path.join([framesDir, frameFileName ])
+  end
+  def get_image_for_frameNum(working_path, frame_number) when is_integer(frame_number) do
+    IO.puts "getting integer frame #{frame_number}"
+    framesDir = frames_dir(working_path)
+    IO.puts "framesDir: #{framesDir}"
+    frameFileName = frame_base(framesDir) <> String.pad_leading("#{frame_number}", 4, "0") #<> @frameExtension
+    Path.join([framesDir, frameFileName ])
+  end
 
-  # gets list of frames from the frames directory
-  def get_thumbs_from_directory(videoName) do
-    # get a list of thumbnails in the working directory and display them
-    File.ls!(thumbs_dir(videoName)) |> Enum.map(fn x -> Path.join(["/file/", "thumbs/", x]) end)
+  # turn a frame number into the full path for that frame png in the frame dir
+  # def get_image_for_frameNum(working_path, frameNum) do
+  #   framesDir = frames_dir(working_path)
+  #   frameFileName = frame_base(framesDir) <> String.pad_leading("#{frameNum}", 4, "0") #<> @frameExtension
+  #   Path.join([framesDir, frameFileName ])
+  # end
+  def browserThumbToShellFrame(videoPath, thumb) do
+    directory_of_thumb = fn thumb -> Path.dirname(thumb) end
+    Path.join([frames_dir(videoPath), String.replace(thumb, directory_of_thumb )])
   end
 
   # get the path to the thumbs directory for the video that is currently being worked on
   # this is a directory with all the frames of the video in an image format
   # but smaller
   def handle_call(:get_thumbs_dir, _from, state) do
-    dir = state |> Map.get(:working_dir) |> thumbs_dir
+    dir = state |> Map.get(:workspace_folder) |> thumbs_dir
     {:reply, dir, state }
   end
 
-  # list the thumbs for this
-  def handle_call(:get_list_of_thumbs, _from, state) do
-    dir = state |> Map.get(:working_dir) |> get_thumbs_from_directory
-    {:reply, dir, state }
+  # list the thumbs for this, using browser friendly format
+  def handle_call({:get_list_of_thumbs}, _from, state) do
+    dir = state |> Map.get(:workspace_folder) #|> get_thumbs_from_directory
+    path_to_thumbs = Path.join([dir, "thumbs"])
+    thumbs = File.ls!(path_to_thumbs) |> Enum.map(fn x -> Path.join(["/file", get_vid_dir(dir), "thumbs", x]) end)
+    {:reply, thumbs, state }
   end
 
   def handle_call({:browser_thumb_to_shell_thumb, thumb}, _from, state) do
     {:reply, browserThumbToShellFrame(state.videoPath, thumb), state }
-  end
-end
-
-
-# genserver that watches a directory every @interval seconds.
-# and broadcasts when it's done updating
-# used as a callback mechanism for the external calls to ffmpeg
-defmodule Emulsion.NotifyWhenDone do
-  use GenServer
-
-  @interval 2000
-
-  def init(init_state) do
-    {:ok, %{ watchname: "", dir: "", file_count: 0 }}
-  end
-
-  def start_link(_opts) do
-    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
-  end
-
-  def handle_call({ :start_watching, dir}, _from, state) do
-    Process.send_after(self(), :cycle_watcher, @interval)
-
-    {:reply, true, %{ state | dir: dir, file_count: 0, watchname: dir }}
-  end
-
-  # when you don't need something
-  def handle_call(:abort_watching, _from, state) do
-    Phoenix.PubSub.broadcast(Emulsion.PubSub, "topic_files", {:operation_complete, %{} })
-    {:stop, :normal, state}
-  end
-
-  def handle_info(:cycle_watcher, state) do
-    # get the number of files in the directory
-    file_count = File.ls!(state.dir) |> Enum.count()
-    # if the number of files has changed, send a message to the main process
-    if file_count != state.file_count do
-      IO.puts "file process still running"
-      Process.send_after(self(), :cycle_watcher, @interval)
-      {:noreply, %{ state | file_count: file_count } }
-    else
-      IO.puts "file process is finished"
-      Phoenix.PubSub.broadcast(Emulsion.PubSub, "topic_files", {:operation_complete, %{} })
-      # stop the watcher
-      {:stop, :normal, state}
-    end
   end
 end

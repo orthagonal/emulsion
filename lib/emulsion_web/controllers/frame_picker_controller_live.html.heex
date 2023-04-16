@@ -1,14 +1,22 @@
-<div :if={@mode == :select_working_dir}>
-  <h1 class="text-3xl font-bold opacity-100">
-    Mode: <%= @mode %>
-    <form phx-submit="select_working_dir">
-      <input type="text">
-      <input type="submit" value="Submit">      
-    </form>
+<%= @mode |> Atom.to_string %> Mode
+
+<div :if={@mode == :select_original_video}>
+  <h1 class="text-3xl font-bold opacity-100"> 
+    Folder: <%= @video_src_folder %>.  Click on a video title to start working with it.
   </h1>
+  <div class="border-2">
+    <button 
+      :for={file <- @files} 
+      phx-click="select_initial_video", 
+      phx-value-file={file} 
+      class="border-4 shadow-lg background-green-500 p-2 m-2"
+    >
+      <%= file %>
+    </button>
+  </div>
 </div>
 
-<div :if={@mode != :select_working_dir} >
+<div :if={@mode != :select_original_video} >
   <div class="border-2">
     <h1 class="text-3xl font-bold opacity-100">
       Mode: <%= @mode %>
