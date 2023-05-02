@@ -54,17 +54,18 @@ defmodule Emulsion.NotifyWhenDone do
   end
 
   def handle_info(:check_directories, state) do
-    new_watches = Enum.map(state.watches, fn watch ->
-      if watch.last_modified == last_modified(watch.path) do
-        Emulsion.PubSub.broadcast("topic_files", {watch.name, %{watch.name, watch.path, "Directory has stopped being modified"}})
-        nil
-      else
-        Process.send_after(self(), :check_directories, @interval)
-        watch
-      end
-    end)
+    # new_watches = Enum.map(state.watches, fn watch ->
+    #   if watch.last_modified == last_modified(watch.path) do
+    #     Emulsion.PubSub.broadcast("topic_files", {watch.name, %{watch.name, watch.path, "Directory has stopped being modified"}})
+    #     nil
+    #   else
+    #     Process.send_after(self(), :check_directories, @interval)
+    #     watch
+    #   end
+    # end)
 
-    {:noreply, %{state | watches: Enum.reject(new_watches, &is_nil/1)}}
+    # {:noreply, %{state | watches: Enum.reject(new_watches, &is_nil/1)}}
+      {:noreply, state}
   end
 
   def watch(pid, name, path) do

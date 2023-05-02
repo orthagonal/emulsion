@@ -13,7 +13,7 @@ defmodule Emulsion.ScriptRunner do
   def sequential_script do "./lib/scripts/extractVid.sh" end
   def tween_shell do "bash" end
   def tween_script do "./lib/scripts/gentween.sh" end
-  def tween_video_script do "./lib/scripts/gentweenVideo.sh" end
+  def tween_video_script do "./lib/scripts/gentweenVideo.py" end
   def thumb_script do "./lib/scripts/thumbs.sh" end
   def join_script do "./lib/scripts/join.sh" end
   def split_script do "./lib/scripts/split.sh" end
@@ -21,10 +21,14 @@ defmodule Emulsion.ScriptRunner do
   def rife_dir do "c:/GitHub/rife/rife" end
 
 
-  def ffmpegJoinParams do "-c:v vp8 -s 1920x1080" end
+  def ffmpegJoinParams do "-c:v vp9 -s 1920x1080" end
 
   # calls the script that splits your video into individual frames
   def execute_split_video_into_frames(videoPath, framesPath) do
+    IO.inspect "rambo execute_split_video_into_frames"
+    IO.inspect split_script()
+    IO.inspect videoPath |> path_for_sequential_shell
+    IO.inspect framesPath |> path_for_sequential_shell
     Rambo.run(sequential_shell(), [
       split_script(),
       videoPath |> path_for_sequential_shell,
@@ -34,6 +38,9 @@ defmodule Emulsion.ScriptRunner do
 
   # calls the script that splits your video into individual thumbs
   def execute_split_video_into_thumbs(videoPath, thumbsPath) do
+    IO.inspect "execute_split_video_into_thumbs"
+    IO.inspect videoPath
+    IO.inspect thumbsPath
     Rambo.run(sequential_shell(), [
       thumb_script(),
       videoPath |> path_for_sequential_shell,
@@ -43,6 +50,7 @@ defmodule Emulsion.ScriptRunner do
 
   # calls the script that joins a sequence of frames into a video
   def execute_generate_sequential_video(frameBase, start_frame, number_of_frames, outputVideoName) do
+    File.rm(outputVideoName |> path_for_sequential_shell)
     args = [
       sequential_script(),
       frameBase |> path_for_sequential_shell,
@@ -68,49 +76,15 @@ defmodule Emulsion.ScriptRunner do
   end
 
   # calls the script that generates a tween between two frames
-  def execute_generate_tween_video(src_frame, dest_frame, tweenExp, output_file) do
-    Rambo.run(tween_shell(), [
+  def execute_generate_tween_video(src_frame, dest_frame, tween_exp, output_file) do
+    File.rm(output_file)
+    Rambo.run("python.exe", [
       tween_video_script(),
-      rife_dir(),
-      "#{tweenExp}",  # $2 is the tween exponent (# of frames to generate)
-      src_frame,   # $3 is the source frame
-      dest_frame, # $4 is the destination frame
-      ffmpegJoinParams,
-      output_file |> path_for_sequential_shell
+      "#{tween_exp}",      # $2 is the tween exponent (# of frames to generate)
+      src_frame,           # $3 is the source frame
+      dest_frame,          # $4 is the destination frame
+      ffmpegJoinParams(), # $5 is the ffmpeg parameters
+      output_file
     ])
   end
-
-  # todo: implement generateAndJoinTweenFrames.sh and then do that
-
-  # just using the sequential script for now
-  # def execute_join_tween_frames_to_video(tweenBase, number_of_frames, outputVideoName) do
-  #   IO.puts("Joining frames to video for tweenbase #{tweenBase}")
-  #   args = [
-  #     join_script(),
-  #     tweenBase |> path_for_sequential_shell,
-  #     "0",
-  #     "#{number_of_frames + 1}",
-  #     outputVideoName |> path_for_sequential_shell,
-  #     ffmpegJoinParams
-  #   ]
-  #   IO.inspect args
-  #   result = Rambo.run(sequential_shell(), args, cd: "c:/GitHub/emulsion")
-  #   IO.inspect result
-  # end
 end
-
-
-
-  # def execute_join_frames_to_video(args) do
-  #   Rambo.run(sequential_shell, args)
-  # end
-  # def execute_join_frames_to_video(frameBase, number_of_frames, outputVideoName) do
-  #   args = [
-  #     sequential_script(),
-  #     frameBase |> path_for_sequential_shell,
-  #     "0",
-  #     "#{number_of_frames + 1}",
-  #     outputVideoName |> path_for_sequential_shell
-  #   ]
-  #   Rambo.run(sequential_shell, args)
-  # end

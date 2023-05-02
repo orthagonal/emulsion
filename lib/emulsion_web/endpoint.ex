@@ -27,7 +27,7 @@ defmodule EmulsionWeb.Endpoint do
   # serves from the project root directory
   plug Plug.Static,
     at: "/file",
-    # absoute form?
+    # todo: this needs to be set at config or env variable
     from: "e:/emulsion_workspace",
     gzip: false
 

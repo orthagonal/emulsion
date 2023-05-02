@@ -1,53 +1,49 @@
-defmodule EmulsionWeb.FilesTest do
-  use EmulsionWeb.ConnCase
+defmodule Emulsion.FilesTest do
+  use ExUnit.Case
+  alias Emulsion.Files
 
-  @tag timeout: :infinity
+  test "set_workspace_folder should set the workspace folder" do
+    {:ok, state} = Files.init(%{})
+    assert state == %{workspace_folder: ""}
 
-  # test "sets and creates the working directory" do
-  #   videoFile = "e:/intro/MVI_5945.MOV"
-  #   res = GenServer.call(Emulsion.Files, :get_working_dir)
-  #   GenServer.cast(Emulsion.Files, {:set_working_dir, videoFile})
-  #   res = GenServer.call(Emulsion.Files, :get_working_dir)
-  #   assert res == "e:/emulsion_workspace/MVI_5945"
-  # end
+    # Test valid disk path
+    { :ok, new_state } = Files.handle_call({:set_workspace_folder, "/tmp/test", :disk}, nil, state)
+    assert new_state == %{workspace_folder: "/tmp/test"}
 
-  # test "takes a source video and makes a working dir for it" do
-  #   videoFile = "e:/intro/MVI_5945.MOV"
-  #   GenServer.cast(Emulsion.Files, {:set_working_dir, videoFile})
-  #   res = GenServer.call(Emulsion.Files, :get_working_dir)
-  #   IO.inspect res
-  #   assert res == "e:/emulsion_workspace/MVI_5945"
-  #   thumbs_dir = GenServer.call(Emulsion.Files, :get_thumbs_dir)
-  #   assert thumbs_dir == "e:/emulsion_workspace/MVI_5945/thumbs"
-  #   framesDir = GenServer.call(Emulsion.Files, :get_frames_dir)
-  #   assert framesDir == "e:/emulsion_workspace/MVI_5945/frames"
-  # end
+    # Test valid browser path
+    { :ok, new_state } = Files.handle_call({:set_workspace_folder, "/test", :browser}, nil, state)
+    assert new_state == %{workspace_folder: "/test"}
 
-    # test "can list out the files in the thumbs directory after setting the working path" do
-    #   videoFile = "e:/intro/MVI_5852.MOV"
-    #   GenServer.cast(Emulsion.Files, {:set_working_dir, videoFile})
-    #   list_of_thumbs = GenServer.call(Emulsion.Files, {:get_list_of_thumbs})
-    #   IO.inspect list_of_thumbs
-    # end
+    # Test invalid path type
+    { :error, _ } = Files.handle_call({:set_workspace_folder, "/test", :invalid}, nil, state)
+  end
 
+  test "get_file_list should return a list of files in a directory" do
+    {:ok, state} = Files.init(%{})
+    { :ok, new_state } = Files.handle_call({:set_workspace_folder, "/tmp/test", :disk}, nil, state)
+    File.write!("/tmp/test/test.txt", "")
 
-  # test "can take in a thumb path in the browser form and convert it to a path that can be used in the shell" do
-  #   videoFile = "e:/intro/MVI_5820.MOV"
-  #   GenServer.cast(Emulsion.Files, {:set_working_dir, videoFile})
-  #   filepath = "/file/thumbs/frame_0706.png"
-  #   shellPath = GenServer.call(Emulsion.Files, {:browser_thumb_to_shell_thumb, filepath})
-  #   IO.inspect shellPath
-  # end
+    { :ok, file_list } = Files.handle_call({:get_file_list, :workspace_folder}, nil, new_state)
+    # make sure it contains "test.txt"
+    assert Enum.member?(file_list, "test.txt")
 
-  # test "can take in two frame names with full paths and make a tween name file" do
-  #   src_frame = "/c/GitHub/emulsion/frames/frame_0002.png"
-  #   dest_frame = "/c/GitHub/emulsion/frames/frame_0338.png"
-  #   tweenName = Emulsion.Files.make_tween_name(src_frame, dest_frame)
-  #   IO.inspect tweenName
-  # end
-  # test "store ghostidle name, workingdirectory, generated tweens, generated video clips" do
-  #   # filepath = "/file/thumbs/frame_0706.png"
-  #   # shellPath = Emulsion.browserThumbToShellFrame(filepath)
-  #   # IO.inspect shellPath
-  # end
+    File.write!("/tmp/test/frames/test.txt", "")
+    { :ok, frame_list } = Files.handle_call({:get_file_list, :frame_folder}, nil, new_state)
+    # make sure it contains "test.txt"
+    assert Enum.member?(file_list, "test.txt")
+
+  end
+
+  test "get_file_path should return the path to a file in a directory" do
+    {:ok, state} = Files.init(%{})
+    { :ok, new_state } = Files.handle_call({:set_workspace_folder, "/tmp/test", :disk}, nil, state)
+    File.write!("/tmp/test/test.txt", "")
+
+    { :ok, file_path } = Files.handle_call({:get_file_path, "test.txt", :workspace_folder, :disk}, nil, new_state)
+    IO.inspect(file_path)
+    assert file_path == "/tmp/test/test.txt"
+
+    { :ok, file_path } = Files.handle_call({:get_file_path, "test.txt", :workspace_folder, :browser}, nil, new_state)
+    assert file_path == "/file/workspace_folder/test.txt"
+  end
 end

@@ -62,20 +62,20 @@ defmodule EmulsionWeb.VideoProcessingTest do
   #   freq = 4
   #   res = GenServer.cast(Emulsion.Video, {:generate_tween_video, start_frame, end_frame, freq})
   #   assert_receive {:operation_complete, %{} }, 120_000
-  # end
+  # # end
 
   # test "execute_generate_tween_video" do
-  #   videoFile = "e:/intro/MVI_5832.MOV"
+  #   videoFile = "e:/intro/MVI_5833.MOV"
   #   Phoenix.PubSub.subscribe(Emulsion.PubSub, "topic_files")
-  #   GenServer.cast(Emulsion.Files, {:set_working_dir, videoFile})
-  #   framesDir = GenServer.call(Emulsion.Files, :get_frames_dir)
-  #   src_frame = Path.join(framesDir, "img_0001.png")
-  #   dest_frame = Path.join(framesDir, "img_0306.png")
+  #   res = GenServer.cast(Emulsion.Files, {:set_workspace_folder, videoFile})
   #   tweenExp = 3
-  #   output_dir = GenServer.call(Emulsion.Files, :get_output_dir)
-  #   output_file = Path.join(output_dir, "tween.webm")
-  #   result = Emulsion.ScriptRunner.execute_generate_tween_video(src_frame, dest_frame, tweenExp, output_file)
-  #   IO.inspect result
+  #   srcFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, "/files/MVI_5833/thumbs/img_0001.png"})
+  #   destFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, "/files/MVI_5833/thumbs/img_0220.png"})
+  #   # IO.inspect srcFrame
+  #   # # output_dir = GenServer.call(Emulsion.Files, :get_output_dir)
+  #   # # output_file = Path.join(output_dir, "tween.webm")
+  #   # result = Emulsion.ScriptRunner.execute_generate_tween_video(src_frame, dest_frame, tweenExp, output_file)
+  #   # IO.inspect result
   # end
 
   # test "get frame from thumb" do
@@ -88,4 +88,29 @@ defmodule EmulsionWeb.VideoProcessingTest do
   #   res = Emulsion.generate_tween_video("./tween", "join.webm")
   #   IO.inspect res
   # end
+
+  # test "execute_generate_tween_video generates expected output" do
+  #   src_frame = "e:/emulsion_workspace/MVI_5833/frames/img_0001.png"
+  #   dest_frame = "e:/emulsion_workspace/MVI_5833/frames/img_0220.png"
+  #   tween_exp = 5
+  #   output_file = "video.webm"
+
+  #   # Call the function and check the output file exists
+  #   { _, res } = Emulsion.ScriptRunner.execute_generate_tween_video(src_frame, dest_frame, tween_exp, output_file)
+  #   IO.inspect res
+  #   IO.puts res.out
+  #   # assert File.exists?(output_file), "Expected output file to be generated"
+  # end
+
+
+  test ":execute call" do
+    videoFile = "e:/intro/MVI_5833.MOV"
+    res = GenServer.call(Emulsion.Files, {:set_workspace_folder, videoFile, "e:/emulsion_workspace", :disk})
+    IO.inspect res
+    src_frame = "e:/emulsion_workspace/MVI_5833/frames/img_0001.png"
+    dest_frame = "e:/emulsion_workspace/MVI_5833/frames/img_0220.png"
+    tween_length = 5
+    result = GenServer.call(Emulsion.Video, {:generate_tween_and_video, src_frame, dest_frame, tween_length}, 999_999)
+    IO.inspect result
+  end
 end
