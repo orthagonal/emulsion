@@ -10,4 +10,7 @@ erl_crash.dump
 .elixir_ls/
 frames/
 rife/
+/lib/scripts/model
+/lib/scripts/train_log
+/output
 /priv/static/

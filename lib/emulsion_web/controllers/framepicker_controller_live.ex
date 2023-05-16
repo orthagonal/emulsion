@@ -4,8 +4,6 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   import Ecto.Query, only: [from: 2]
   import Emulsion
 
-
-
   @modes [:select_source_frame, :select_dest_frame, :add_to_ghostidle, :select_continuous_frames]
 
   def mount(session, params, socket) do
@@ -22,8 +20,7 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     }
   end
 
-
-#   <button class="border-2 shadow-lg" phx-click="toggle_video_preview">
+  #<button class="border-2 shadow-lg" phx-click="toggle_video_preview">
 #   Toggle Video Preview
 # </button>
 # <div if={@videoPreviewVisible}>
@@ -63,8 +60,6 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     {:noreply, assign(socket, mode: :select_dest_frame)}
   end
 
-
-
   # respond to events from the video server
   # format of msg is:
   # %{
@@ -103,7 +98,6 @@ defmodule EmulsionWeb.FramePickerControllerLive do
       # videoPreviewVisible: true
     {:noreply, socket}
   end
-
 
   # def handle_event("toggle_video_preview", event, socket) do
   #   {:noreply, assign(socket, videoPreviewVisible: !socket.assigns.videoPreviewVisible)}

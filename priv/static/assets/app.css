@@ -810,10 +810,6 @@ select {
   margin: -0.75rem;
 }
 
-.m-2 {
-  margin: 0.5rem;
-}
-
 .-my-4 {
   margin-top: -1rem;
   margin-bottom: -1rem;
@@ -1159,10 +1155,6 @@ select {
 
 .border-2 {
   border-width: 2px;
-}
-
-.border-4 {
-  border-width: 4px;
 }
 
 .border-t {
@@ -1547,10 +1539,6 @@ select {
 .ring-rose-500 {
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(244 63 94 / var(--tw-ring-opacity));
-}
-
-.filter {
-  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
 }
 
 .transition-opacity {
