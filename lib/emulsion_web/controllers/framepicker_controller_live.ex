@@ -8,16 +8,30 @@ defmodule EmulsionWeb.FramePickerControllerLive do
 
   def mount(session, params, socket) do
     Phoenix.PubSub.subscribe(Emulsion.PubSub, "topic_files")
-    files = GenServer.call(Emulsion.Video, {:list_resources, :source})
+    files = GenServer.call(Emulsion.Video, {:list_resources, :source}, :infinity)
+    nodes = []#%{id: 1, label: "Node 1"}, %{id: 2, label: "Node 2"}]
+    edges = []#%{from: 1, to: 2}]
+    diagram = Jason.encode!(%{nodes: nodes, edges: edges})
     {
       :ok,
       assign(socket,
         working_root: "e:/emulsion_workspace",
         mode: :select_initial_video,
         files: files,
-        currentVideo: ""
+        current_video: "",
+        diagram: diagram,
       )
     }
+  end
+
+  # def handle_event("next_video", _value, socket) do
+  #   # Logic to get the next video URLs goes here
+  #   {:noreply, assign(socket, next_video_a: next_video_a_url, next_video_b: next_video_b_url)}
+  # end
+
+  def handle_event("video_started", %{"video_name" => video_name}, socket) do
+    # Handle video start event, maybe you want to log it or change some state
+    {:noreply, socket}
   end
 
   #<button class="border-2 shadow-lg" phx-click="toggle_video_preview">
@@ -35,9 +49,10 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     case GenServer.call(Emulsion.Video, {:set_working_video, file, socket.assigns.working_root }) do
       true ->
         IO.puts "gonna split"
-        thumbFiles = GenServer.call(Emulsion.Video, {:split_video_into_frames})
+        thumbFiles = GenServer.call(Emulsion.Video, {:split_video_into_frames}, :infinity)
         IO.puts "split yields #{inspect thumbFiles}"
         IO.inspect thumbFiles |> List.first
+
         {:noreply, socket |> assign(%{
           # mode: :want_to_select_source,
           mode: :select_source_frame,
@@ -109,11 +124,14 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     srcFrameNumber = extract_frame_number(srcFramePath)
     destFrameNumber = extract_frame_number(destFramePath)
 
+    IO.puts " the frame numbers is #{srcFrameNumber} thru #{destFrameNumber}"
+
     srcFolderPath = Path.dirname(srcFramePath)
     output_dir = GenServer.call(Emulsion.Files, {:get_file_path, "", :output_folder, :disk})
 
     start_frame = srcFrameNumber
     number_of_frames = destFrameNumber - srcFrameNumber + 1
+    IO.puts "start frame is #{start_frame} and number of frames is #{number_of_frames}"
     outputVideoName = Path.join([output_dir, "#{srcFrameNumber}_thru_#{destFrameNumber}.webm"])
     pid = self()
 
@@ -123,6 +141,10 @@ defmodule EmulsionWeb.FramePickerControllerLive do
         srcFolderPath, start_frame, number_of_frames, outputVideoName
       )
       video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, outputVideoName})
+      Emulsion.Playgraph.add_node(srcFramePath)
+      Emulsion.Playgraph.add_node(destFramePath)
+      Emulsion.Playgraph.add_edge(srcFramePath, destFramePath, outputVideoName |> Path.basename, outputVideoName)
+      IO.puts "script runner ran fine"
       send(pid, {:sequence_generated, video_name})
     end)
 
@@ -134,6 +156,9 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     |> String.to_integer()
   end
 
+  @doc """
+  Generate a tween video from the selected source and destination frames
+  """
   def handle_event("generate_tween", event, socket) do
     srcFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, socket.assigns.srcFrame})
     destFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, socket.assigns.destFrame})
@@ -142,22 +167,45 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     # so that it can call back when the tween is done
     pid = self()
     # call a Task.start_link that calls the GenServer.cast
+    # Task.start_link(fn ->
+    #   video_name = GenServer.call(Emulsion.Video, {:generate_tween_and_video, srcFrame, destFrame, tweenLength}, 999_999)
+    #   basename = Path.basename(video_name)
+    #   # convert the video name to one suitable fofr use in the browser with the '/file/' prefix
+    #   video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
+    #   send(pid, {:tween_generated, video_name})
+    # end)
     Task.start_link(fn ->
       video_name = GenServer.call(Emulsion.Video, {:generate_tween_and_video, srcFrame, destFrame, tweenLength}, 999_999)
       basename = Path.basename(video_name)
-      # convert the video name to one suitable fofr use in the browser with the '/file/' prefix
+      # convert the video name to one suitable for use in the browser with the '/file/' prefix
       video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
+      # add nodes and edge to the graph
+      Emulsion.Playgraph.add_node(srcFrame)
+      Emulsion.Playgraph.add_node(destFrame)
+      Emulsion.Playgraph.add_edge(srcFrame, destFrame, basename, video_name)
       send(pid, {:tween_generated, video_name})
     end)
     {:noreply, socket}
   end
 
   def handle_info({:sequence_generated, video_name }, socket) do
-    {:noreply, assign(socket, currentVideo: video_name)}
+    nodes = GenServer.call(Emulsion.Playgraph, {:get_nodes})
+    edges = GenServer.call(Emulsion.Playgraph, {:get_edges})
+    newsocket =
+      socket
+      |> assign(current_video: video_name)
+      |> push_event("update_graph", %{nodes: nodes, edges: edges})
+    {:noreply, newsocket}
   end
 
   def handle_info({:tween_generated, video_name }, socket) do
-    {:noreply, assign(socket, currentVideo: video_name)}
+    nodes = GenServer.call(Emulsion.Playgraph, {:get_nodes})
+    edges = GenServer.call(Emulsion.Playgraph, {:get_edges})
+    newsocket =
+      socket
+      |> assign(current_video: video_name)
+      |> push_event("update_graph", %{nodes: nodes, edges: edges})
+    {:noreply, newsocket}
   end
 
   def handle_event("click_frame", %{ "frame" => frame } = event, socket) do
@@ -167,6 +215,12 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     else
       {:noreply, assign(socket, destFrame: frame)}
     end
+  end
+
+  # a hande shortcut to set the source frame to the current dest frame
+  # makes it easy to build continuous paths through the video
+  def handle_event("set_source_to_dest", event, socket) do
+    {:noreply, assign(socket, srcFrame: socket.assigns.destFrame, mode: :select_dest_frame)}
   end
 
 end

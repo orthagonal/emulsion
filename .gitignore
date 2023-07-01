@@ -6,6 +6,9 @@
 erl_crash.dump
 *.ez
 *.beam
+*.webm
+*.mp4
+node_modules
 /config/*.secret.exs
 .elixir_ls/
 frames/
@@ -13,4 +16,8 @@ rife/
 /lib/scripts/model
 /lib/scripts/train_log
 /output
-/priv/static/
+/priv/static
+
+Do the live animation test
+do it with the doll
+see how much control level you can get

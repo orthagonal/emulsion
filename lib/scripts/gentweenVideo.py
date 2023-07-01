@@ -1,3 +1,4 @@
+# most of this is the RIFE cde for powering the tween generator
 import os
 import sys
 from collections import namedtuple
@@ -131,10 +132,10 @@ for i in range(len(img_list)):
 print("Done now converting to video")
 folderOut = args.folderOut
 
-# # Create video using ffmpeg
-result = subprocess.call([
-    "c:/GitHub/emulsion/lib/scripts/ffmpeg.exe", "-start_number", "1", "-i", os.path.join(folderOut, "img%d.png"),
-    "-frames:v", str(frame_count), *ffmpeg_params.split(), output_file
+# Create video using ffmpeg
+result = subprocess.run([
+    "c:/GitHub/emulsion/lib/scripts/ffmpeg.exe", "-start_number", "1", "-i", os.path.join(folderOut, "img%d.png"), "-c:v", "vp9",
+    "-s", "1920x1080", "-pix_fmt", "yuva420p", output_file
 ])
 print("Done making video" + output_file)
 # Remove generated tween frames

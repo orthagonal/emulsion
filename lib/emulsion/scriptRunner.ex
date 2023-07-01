@@ -21,7 +21,7 @@ defmodule Emulsion.ScriptRunner do
   def rife_dir do "c:/GitHub/rife/rife" end
 
 
-  def ffmpegJoinParams do "-c:v vp9 -s 1920x1080" end
+  def ffmpeg_params do "-c:v vp9 -s 1920x1080" end
 
   # calls the script that splits your video into individual frames
   def execute_split_video_into_frames(videoPath, framesPath) do
@@ -57,9 +57,11 @@ defmodule Emulsion.ScriptRunner do
       "#{start_frame}",
       "#{number_of_frames}",
       outputVideoName |> path_for_sequential_shell,
-      ffmpegJoinParams
+      ffmpeg_params
     ]
-    IO.inspect args
+    IO.puts "running sequential script with args: #{inspect args}"
+    IO.puts "running sequential script with args: #{inspect args}"
+    IO.puts "running sequential script with args: #{inspect args}"
     Rambo.run(sequential_shell(), args, cd: "c:/GitHub/emulsion")
   end
 
@@ -83,7 +85,7 @@ defmodule Emulsion.ScriptRunner do
       "#{tween_exp}",      # $2 is the tween exponent (# of frames to generate)
       src_frame,           # $3 is the source frame
       dest_frame,          # $4 is the destination frame
-      ffmpegJoinParams(), # $5 is the ffmpeg parameters
+      ffmpeg_params(), # $5 is the ffmpeg parameters
       output_file
     ])
   end

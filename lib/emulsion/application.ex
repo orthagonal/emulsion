@@ -10,6 +10,7 @@ defmodule Emulsion.Application do
     children = [
       # Start the Telemetry supervisor
       EmulsionWeb.Telemetry,
+      { Emulsion.Playgraph, name: :playgraph },
       { Emulsion.Files, name: :fileServer },
       { Emulsion.Video, name: :videoServer },
       { Emulsion.NotifyWhenDone, name: :notifyWhenDone},
