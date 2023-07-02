@@ -81,8 +81,7 @@ defmodule Emulsion.Video do
     # get the src_framebase as just the file name without the extension
     src_framebase = Path.basename(src_frame, Path.extname(src_frame))
     dest_framebase = Path.basename(dest_frame, Path.extname(dest_frame))
-    output_file = Path.join(output_dir, "#{src_framebase}_to_#{dest_framebase}.#{@videoFormat} ")
-    IO.puts "output file is #{output_file}"
+    output_file = Path.join(output_dir, "#{src_framebase}_to_#{dest_framebase}.#{@videoFormat}")
     Emulsion.ScriptRunner.execute_generate_tween_video(src_frame, dest_frame, tween_length, output_file)
     {:reply, output_file, state}
   end

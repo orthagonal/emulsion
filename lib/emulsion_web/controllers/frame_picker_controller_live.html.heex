@@ -8,8 +8,11 @@
   <% else %>
 
   <div :if={@mode != :select_initial_video} >
-    <div class="border-2">
-      <video id="video" controls autoplay src={@current_video}>
+    <div id="video-player" class="border-2" phx-hook="VideoPlayer">
+      <video id="videoA" controls src={@current_video}>
+      </video>
+      
+      <video id="videoB" controls>
       </video>
       <h1 class="text-3xl font-bold opacity-100">
         Mode: <%= @mode %>

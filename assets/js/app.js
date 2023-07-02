@@ -21,7 +21,7 @@ import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
-import { DataSet, Network } from 'vis/index-network';
+import Hooks from "./hooks"
 
 // Show progress bar on live navigation and form submits
 topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
@@ -34,66 +34,6 @@ window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 // >> liveSocket.disableLatencySim()
 window.liveSocket = liveSocket
 
-let Hooks = {};
-Hooks.VisNetwork = {
-  mounted() {
-    let data = JSON.parse(this.el.attributes['data_diagram_data'].value)
-    this.network = this.initNetwork(this.el, data);
-    this.handleEvent('update_graph', ({ nodes, edges }) => {
-      console.log("update_graph", nodes, edges);
-      this.updateGraph(nodes, edges);
-    });
-  },
-  initNetwork(el, data) {
-    console.log("data", data);
-    const nodes = new DataSet(data.nodes)
-    const edges = new DataSet(data.edges);
-    const container = el;
-    const diagram = { nodes, edges };
-    const options = {};
-    return new Network(container, diagram, options);
-  },
-  updateGraph(nodes, edges) {
-    this.network.setData({ nodes, edges });
-  },
-};
-Hooks.VideoPlayer = {
-  mounted() {
-    this.videoA = this.el.querySelector("#videoA");
-    this.videoB = this.el.querySelector("#videoB");
-    this.videoB.style.display = "none";
-    this.videoA.style.display = "block";
-
-    this.videoA.onended = () => {
-      this.videoB.play();
-      this.videoA.style.display = "none";
-      this.videoB.style.display = "block";
-      this.pushEvent('video_started', { video_name: this.videoB.dataset.videoName });
-      this.pushEvent('next_video', {});
-    };
-
-    this.videoB.onended = () => {
-      this.videoA.play();
-      this.videoB.style.display = "none";
-      this.videoA.style.display = "block";
-      this.pushEvent('video_started', { video_name: this.videoA.dataset.videoName });
-      this.pushEvent('next_video', {});
-    };
-  },
-
-  updated() {
-    const nextVideoA = this.el.dataset.nextVideoA;
-    const nextVideoB = this.el.dataset.nextVideoB;
-    if (nextVideoA) {
-      this.videoA.src = nextVideoA;
-    }
-    if (nextVideoB) {
-      this.videoB.src = nextVideoB;
-    }
-  }
-};
-
-
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 let liveSocket = new LiveSocket("/live", Socket, { 
   hooks: Hooks,
@@ -102,3 +42,4 @@ let liveSocket = new LiveSocket("/live", Socket, {
 
 // connect if there are any LiveViews on the page
 liveSocket.connect();
+

@@ -25,10 +25,6 @@ defmodule Emulsion.ScriptRunner do
 
   # calls the script that splits your video into individual frames
   def execute_split_video_into_frames(videoPath, framesPath) do
-    IO.inspect "rambo execute_split_video_into_frames"
-    IO.inspect split_script()
-    IO.inspect videoPath |> path_for_sequential_shell
-    IO.inspect framesPath |> path_for_sequential_shell
     Rambo.run(sequential_shell(), [
       split_script(),
       videoPath |> path_for_sequential_shell,
@@ -38,9 +34,6 @@ defmodule Emulsion.ScriptRunner do
 
   # calls the script that splits your video into individual thumbs
   def execute_split_video_into_thumbs(videoPath, thumbsPath) do
-    IO.inspect "execute_split_video_into_thumbs"
-    IO.inspect videoPath
-    IO.inspect thumbsPath
     Rambo.run(sequential_shell(), [
       thumb_script(),
       videoPath |> path_for_sequential_shell,
@@ -59,9 +52,6 @@ defmodule Emulsion.ScriptRunner do
       outputVideoName |> path_for_sequential_shell,
       ffmpeg_params
     ]
-    IO.puts "running sequential script with args: #{inspect args}"
-    IO.puts "running sequential script with args: #{inspect args}"
-    IO.puts "running sequential script with args: #{inspect args}"
     Rambo.run(sequential_shell(), args, cd: "c:/GitHub/emulsion")
   end
 

@@ -137,7 +137,7 @@ result = subprocess.run([
     "c:/GitHub/emulsion/lib/scripts/ffmpeg.exe", "-start_number", "1", "-i", os.path.join(folderOut, "img%d.png"), "-c:v", "vp9",
     "-s", "1920x1080", "-pix_fmt", "yuva420p", output_file
 ])
-print("Done making video" + output_file)
+print("Done making video :::" + output_file + ":::")
 # Remove generated tween frames
 # for file in os.listdir(folderOut):
 #     os.remove(os.path.join(folderOut, file))

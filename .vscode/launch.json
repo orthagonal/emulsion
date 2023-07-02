@@ -4,6 +4,7 @@
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
+
     {
       "type": "mix_task",
       "name": "mix Phoenix Server",
@@ -13,6 +14,26 @@
       "taskArgs": ["phx.server"],
       "startApps": true,
       "projectDir": "${workspaceRoot}"
-    }
+    },
+    {
+      "name": "Debug Jest Tests",
+      "type": "node",
+      "request": "launch",
+      "runtimeArgs": [
+          "--inspect-brk",
+          "${workspaceRoot}/node_modules/.bin/jest",
+          "--runInBand"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "disableOptimisticBPs": true,
+      "windows": {
+          "runtimeArgs": [
+              "--inspect-brk",
+              "${workspaceRoot}/node_modules/jest/bin/jest.js",
+              "--runInBand"
+          ]
+      }
+  }
   ]
 }

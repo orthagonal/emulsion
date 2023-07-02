@@ -57,9 +57,10 @@ defmodule Emulsion.Playgraph do
           "from" => src_node_name,
           "to" => destination_node_name,
           "destination" => destination_node_name,
-          "path" => path_to_video
+          "fromPath" => GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, src_node_name}),
+          "toPath" => GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, destination_node_name}),
+          "path" => GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, path_to_video})
         }
-
         Map.put(node, "edges", [edge | node["edges"]])
       else
         node
