@@ -20,27 +20,20 @@ defmodule EmulsionWeb.FramePickerControllerLive do
         files: files,
         current_video: "",
         diagram: diagram,
+        saved_playgraph_filename: "",
+        saved_playgraphs: [],
+        selected_playgraph: "",
       )
     }
   end
 
-  # def handle_event("next_video", _value, socket) do
-  #   # Logic to get the next video URLs goes here
-  #   {:noreply, assign(socket, next_video_a: next_video_a_url, next_video_b: next_video_b_url)}
-  # end
-
+  @doc """
+  list the playgraphs in the workspace
+  """
   def handle_event("video_started", %{"video_name" => video_name}, socket) do
     # Handle video start event, maybe you want to log it or change some state
     {:noreply, socket}
   end
-
-  #<button class="border-2 shadow-lg" phx-click="toggle_video_preview">
-#   Toggle Video Preview
-# </button>
-# <div if={@videoPreviewVisible}>
-#   <video id="video" controls autoplay src={"/file/" <> @videoPath}>
-#   </video>
-# </div>
 
   # when they select the initial video, make/set the workspace for that video
   # and populate the frame and thumb folders
@@ -48,17 +41,18 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   def handle_event("select_initial_video", %{ "file" => file } = event, socket) do
     case GenServer.call(Emulsion.Video, {:set_working_video, file, socket.assigns.working_root }) do
       true ->
-        IO.puts "gonna split"
         thumbFiles = GenServer.call(Emulsion.Video, {:split_video_into_frames}, :infinity)
-        IO.puts "split yields #{inspect thumbFiles}"
-        IO.inspect thumbFiles |> List.first
-
+        saved_playgraphs_path = Path.join([socket.assigns.working_root, "saved_playgraphs"])
+        saved_playgraphs = Emulsion.Playgraph.get_saved_playgraphs(saved_playgraphs_path)
+        selected_playgraph = saved_playgraphs |> List.first("")
         {:noreply, socket |> assign(%{
           # mode: :want_to_select_source,
           mode: :select_source_frame,
           thumbFiles: thumbFiles,
           srcFrame: thumbFiles |> List.first,
           destFrame: thumbFiles |> List.last,
+          saved_playgraphs: saved_playgraphs,
+          selected_playgraph: selected_playgraph,
         }
         )}
       false ->
@@ -223,4 +217,32 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     {:noreply, assign(socket, srcFrame: socket.assigns.destFrame, mode: :select_dest_frame)}
   end
 
+  def handle_event("update_saved_playgraph_filename", %{"saved_playgraph_filename" => filename}, socket) do
+    {:noreply, assign(socket, :saved_playgraph_filename, filename)}
+  end
+
+  def handle_event("save", %{}, socket) do
+    path = Path.join([socket.assigns.working_root, "saved_playgraphs", socket.assigns.saved_playgraph_filename])
+    :ok = File.mkdir_p(Path.dirname(path))
+    :ok = Emulsion.Playgraph.save(path)
+    {:noreply, socket}
+  end
+
+  def handle_event("update_selected_playgraph", %{"selected_playgraph" => selected_playgraph}, socket) do
+    {:noreply, assign(socket, :selected_playgraph, selected_playgraph)}
+  end
+
+  def handle_event("load", _params, socket) do
+    playgraph_filename = socket.assigns.selected_playgraph
+    file_path = Path.join([socket.assigns.working_root, "saved_playgraphs", playgraph_filename])
+    IO.inspect file_path
+    :ok = Emulsion.Playgraph.load(file_path)
+    nodes = GenServer.call(Emulsion.Playgraph, {:get_nodes})
+    edges = GenServer.call(Emulsion.Playgraph, {:get_edges})
+    newsocket =
+      socket
+      |> push_event("update_graph", %{nodes: nodes, edges: edges})
+
+    {:noreply, newsocket}
+  end
 end

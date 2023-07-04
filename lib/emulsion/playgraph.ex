@@ -15,6 +15,13 @@ defmodule Emulsion.Playgraph do
     GenServer.call(__MODULE__, {:save, filename})
   end
 
+  def get_saved_playgraphs(path) do
+    path
+    |> Path.join("*.playgraph")
+    |> Path.wildcard()
+    |> Enum.map(&Path.basename/1)
+  end
+
   def load(filename) do
     GenServer.call(__MODULE__, {:load, filename})
   end
@@ -49,6 +56,12 @@ defmodule Emulsion.Playgraph do
       state
       |> Jason.encode!()  # Convert to JSON
 
+    # add .playgraph if the filename doesn't end in it already:
+    filename = if String.ends_with?(filename, ".playgraph") do
+      filename
+    else
+      filename <> ".playgraph"
+    end
     # Write the JSON string to a file
     case File.write(filename, json_string) do
       :ok ->
@@ -61,6 +74,11 @@ defmodule Emulsion.Playgraph do
 
   def handle_call({:load, filename}, _from, state) do
     # Read the file
+    filename = if String.ends_with?(filename, ".playgraph") do
+      filename
+    else
+      filename <> ".playgraph"
+    end
     case File.read(filename) do
       {:ok, json_string} ->
         # Decode the JSON string

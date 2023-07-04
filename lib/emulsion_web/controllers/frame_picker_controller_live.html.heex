@@ -17,6 +17,17 @@
       <h1 class="text-3xl font-bold opacity-100">
         Mode: <%= @mode %>
       </h1>
+      <form phx-submit="save">
+        <input type="text" name="saved_playgraph_filename" phx-change="update_saved_playgraph_filename" value={@saved_playgraph_filename} />
+        <button type="submit">Save</button>
+      </form>
+      <form phx-submit="load">
+        <select name="selected_playgraph" phx-change="update_selected_playgraph" value={@selected_playgraph}>
+          <option :for={file <- @saved_playgraphs} value={file}><%= file %></option>
+        </select>
+        <button type="submit">Load</button>
+      </form>
+      
       <button class="border-2 shadow-lg bg-slate-400" phx-click="want_to_select_source">
         Select Source Frame
       </button>
