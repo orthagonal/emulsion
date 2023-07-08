@@ -7,6 +7,10 @@ defmodule Emulsion.Playgraph do
     GenServer.start_link(__MODULE__, %{"nodes" => []}, name: __MODULE__)
   end
 
+  def export_playgraph(folder_path) do
+    GenServer.call(__MODULE__, {:export_playgraph, folder_path})
+  end
+
   def reset() do
     GenServer.call(__MODULE__, :reset)
   end
@@ -50,27 +54,83 @@ defmodule Emulsion.Playgraph do
     {:reply, :ok, %{"nodes" => []}}
   end
 
-  def handle_call({:save, filename}, _from, state) do
-    # Convert the state to a JSON string
-    json_string =
-      state
-      |> Jason.encode!()  # Convert to JSON
+@doc """
+Export the playgraph and all of its assets to a folder
+"""
+def handle_call({:export_playgraph, folder_path}, _from, state) do
+  # Ensure the assets folder exists
+  assets_path = Path.join(folder_path, "assets")
+  File.mkdir_p(assets_path)
 
-    # add .playgraph if the filename doesn't end in it already:
-    filename = if String.ends_with?(filename, ".playgraph") do
-      filename
-    else
-      filename <> ".playgraph"
-    end
-    # Write the JSON string to a file
-    case File.write(filename, json_string) do
-      :ok ->
-        {:reply, :ok, state}
+  # Adjust paths in the state and copy the assets
+  new_state = state
+  |> adjust_edge_paths_for_export(assets_path)
+  |> copy_assets_to_export_folder(assets_path)
 
-      error ->
-        {:reply, error, state}
+  # Save the adjusted playgraph to the indicated folder
+  playgraph_path = Path.join(folder_path, "main.playgraph")
+  save_to_file(playgraph_path, new_state)
+
+  {:reply, :ok,  state}
+end
+
+defp adjust_edge_paths_for_export(state, assets_path) do
+  Map.update!(state, "nodes", fn nodes ->
+    Enum.map(nodes, fn node ->
+      Map.update!(node, "edges", fn edges ->
+        Enum.map(edges, fn edge ->
+          Map.put(edge, "original_path", edge["path"]) # Store original path
+          |> Map.update!("path", fn _old_path ->
+            # Replace the old path with the new one in the assets folder
+            Path.join(assets_path, Path.basename(edge["path"]))
+          end)
+        end)
+      end)
+    end)
+  end)
+end
+
+defp copy_assets_to_export_folder(state, assets_path) do
+  Enum.each(get_edges_from_state(state), fn edge ->
+    if Path.extname(edge["original_path"]) == ".webm" do
+      disk_path = GenServer.call(Emulsion.Files, {:convert_browser_path_to_disk_path, edge["original_path"]})
+      IO.puts "copying #{disk_path} to #{Path.join(assets_path, Path.basename(disk_path))}"
+      res = File.cp(disk_path, Path.join(assets_path, Path.basename(disk_path)))
+      IO.inspect(res)
     end
+  end)
+  state
+end
+
+
+
+
+def handle_call({:save, filename}, _from, state) do
+  # add .playgraph if the filename doesn't end in it already:
+  filename = if String.ends_with?(filename, ".playgraph") do
+    filename
+  else
+    filename <> ".playgraph"
   end
+  # Save the state to file
+  case save_to_file(filename, state) do
+    :ok ->
+      {:reply, :ok, state}
+
+    error ->
+      {:reply, error, state}
+  end
+end
+
+defp save_to_file(filename, state) do
+  # Convert the state to a JSON string
+  json_string =
+    state
+    |> Jason.encode!()  # Convert to JSON
+
+  # Write the JSON string to a file
+  File.write(filename, json_string)
+end
 
   def handle_call({:load, filename}, _from, state) do
     # Read the file
@@ -100,11 +160,14 @@ defmodule Emulsion.Playgraph do
   end
 
   def handle_call({:get_edges}, _from, state) do
-    edges = state["nodes"]
-             |> Enum.map(& &1["edges"])
-             |> List.flatten()
-
+    edges = get_edges_from_state(state)
     {:reply, edges, state}
+  end
+
+  defp get_edges_from_state(state) do
+    state["nodes"]
+    |> Enum.map(& &1["edges"])
+    |> List.flatten()
   end
 
   def handle_call({:add_node, frame_path}, _from, state) do

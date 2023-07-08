@@ -17,6 +17,12 @@
       <h1 class="text-3xl font-bold opacity-100">
         Mode: <%= @mode %>
       </h1>
+      <form phx-submit="export">
+        <input type="text" name="export_file" id="export_file" phx-change="update_export_file" placeholder="Enter filename" />
+        <button type="submit">Export</button>
+      </form>
+      
+     
       <form phx-submit="save">
         <input type="text" name="saved_playgraph_filename" phx-change="update_saved_playgraph_filename" value={@saved_playgraph_filename} />
         <button type="submit">Save</button>
@@ -82,12 +88,6 @@
         </div>
       </div>
     </div>
-    
-    
   </div>
   <% end %>
 </div>
-
-
-- and then chain play based on graph
-- and then export graph

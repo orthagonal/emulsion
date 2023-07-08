@@ -27,6 +27,16 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     }
   end
 
+  def handle_event("update_export_file", %{"export_file" => export_file}, socket) do
+    {:noreply, assign(socket, :export_file, export_file)}
+  end
+
+  def handle_event("export", _, socket) do
+    Emulsion.Playgraph.export_playgraph(socket.assigns.export_file)
+    {:noreply, socket}
+  end
+
+
   @doc """
   list the playgraphs in the workspace
   """
