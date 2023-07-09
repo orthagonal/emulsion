@@ -23,6 +23,7 @@ defmodule EmulsionWeb.FramePickerControllerLive do
         saved_playgraph_filename: "",
         saved_playgraphs: [],
         selected_playgraph: "",
+        selected_node_id: "", selected_edge_id: ""
       )
     }
   end
@@ -130,8 +131,15 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   end
 
   defp extract_frame_number(frame_path) do
-    Regex.named_captures(~r/img_(?<frame_number>\d+)\.png$/, frame_path)["frame_number"]
-    |> String.to_integer()
+    try do
+      Regex.named_captures(~r/img_(?<frame_number>\d+)\.png$/, frame_path)["frame_number"]
+      |> String.to_integer()
+    rescue
+      _ ->
+        IO.puts "*****************************************************************"
+        IO.puts "*I was unable to extract the frame number from #{frame_path}    *"
+        IO.puts "*****************************************************************"
+    end
   end
 
   @doc """
@@ -275,4 +283,64 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     # Notify the LiveView process
     send(pid, {:tween_generated, video_name})
   end
+
+  def handle_event("select_node", %{"node_id" => node_id}, socket) do
+    IO.puts "this is the node_id: #{node_id}"
+    {:noreply, assign(socket, selected_node_id: node_id)}
+  end
+
+  def handle_event("select_edge", %{"edge_id" => edge_id}, socket) do
+    {:noreply, assign(socket, selected_edge_id: edge_id)}
+  end
+
+  def handle_event("add_tag", %{  "edge_id" => edge_id, "tag" => tag }, socket) do
+    Playgraph.add_tag(edge_id, tag)
+    {:noreply, socket}
+  end
+
+  def handle_event("idle_around_frame", %{"src_frame" => src_frame, "range" => range}, socket) do
+    IO.puts "*********************************"
+    IO.puts "idle_around_frame: #{src_frame}"
+    IO.puts "*********************************"
+    generate_idle_tween(src_frame, range, :forward)
+    generate_idle_tween(src_frame, range, :backward)
+
+    {:noreply, socket}
+  end
+
+  defp generate_idle_tween(src_frame, range, direction) when is_binary(range) do
+    range = String.to_integer(range)
+    generate_idle_tween(src_frame, range, direction)
+  end
+
+  defp generate_idle_tween(src_frame, range, direction) do
+    frame_num = extract_frame_number(src_frame)
+    frame_name = Path.basename(src_frame)
+
+    pid = self()
+
+    Task.start_link(fn ->
+      case direction do
+        :forward ->
+          dest_frame_num = frame_num + range
+          dest_frame = String.replace(src_frame, "#{frame_num}", "#{dest_frame_num}")
+          video_name = GenServer.call(Emulsion.Video, {:generate_tween_and_video, src_frame, dest_frame, "5"}, 999_999)
+          basename = Path.basename(video_name)
+          video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
+          Emulsion.Playgraph.add_node(dest_frame)
+          Emulsion.Playgraph.add_edge(src_frame, dest_frame, basename, video_name)
+          send(pid, {:tween_generated, video_name})
+        :backward ->
+          dest_frame_num = frame_num - range
+          dest_frame = String.replace(src_frame, "#{frame_num}", "#{dest_frame_num}")
+          video_name = GenServer.call(Emulsion.Video, {:generate_tween_and_video, src_frame, dest_frame, "5"}, 999_999)
+          basename = Path.basename(video_name)
+          video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
+          Emulsion.Playgraph.add_node(dest_frame)
+          Emulsion.Playgraph.add_edge(src_frame, dest_frame, basename, video_name)
+          send(pid, {:tween_generated, video_name})
+        end
+    end)
+  end
+
 end

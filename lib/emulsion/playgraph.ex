@@ -102,9 +102,6 @@ defp copy_assets_to_export_folder(state, assets_path) do
   state
 end
 
-
-
-
 def handle_call({:save, filename}, _from, state) do
   # add .playgraph if the filename doesn't end in it already:
   filename = if String.ends_with?(filename, ".playgraph") do
@@ -219,4 +216,28 @@ end
 
     {:reply, :ok, Map.put(state, "nodes", nodes)}
   end
+
+  def tag_edge(edge_id, tag) do
+    GenServer.call(__MODULE__, {:tag_edge, edge_id, tag})
+  end
+
+  def handle_call({:tag_edge, edge_id, tag}, _from, state) do
+    # Map over the nodes, and for each node, map over its edges.
+    # If an edge's ID matches the provided edge_id, add the tag to its "tags" list.
+    nodes = Enum.map(state["nodes"], fn node ->
+      Map.update!(node, "edges", fn edges ->
+        Enum.map(edges, fn edge ->
+          if edge["id"] == edge_id do
+            # If the edge already has a "tags" key, append to it; otherwise, create it.
+            Map.update(edge, "tags", [tag], &([tag | &1]))
+          else
+            edge
+          end
+        end)
+      end)
+    end)
+
+    {:reply, :ok, Map.put(state, "nodes", nodes)}
+  end
+
 end

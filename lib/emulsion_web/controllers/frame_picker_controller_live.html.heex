@@ -65,11 +65,22 @@
       </div>
 
     </div>
-    <div
-      id="mynetwork" phx-hook="VisNetwork" phx-update="ignore" 
-      class="w-full h-full border-sky-100"
-      data_diagram_data={@diagram}>
+    <div class="grid grid-cols-3 gap-4">
+      <div
+        id="mynetwork" phx-hook="VisNetwork" phx-update="ignore" 
+        class="col-span-2 w-full h-full border-sky-100"
+        data_diagram_data={@diagram}>
+      </div>
+      <div id="contextPanel" phx-hook="ContextPanel" phx-update="ignore" 
+          class="col-span-1 w-full h-full border-sky-100" 
+          selected-edge-id={ @selected_edge_id }>
+      </div>
+      <div id="contextPanel" phx-hook="ContextPanel" phx-update="ignore" 
+        class="col-span-1 w-full h-full border-sky-100" 
+        data-selected-node-id={ @selected_node_id }>
+      </div>
     </div>
+    
     
     <div class="flex h-screen">
       <div id="left-column" class="w-1/4 overflow-auto">
@@ -103,4 +114,9 @@
     </div>
   </div>
   <% end %>
+
+  <div class="custom-menu hidden bg-white rounded shadow-lg z-50">
+    <!-- Menu items will be inserted dynamically here -->
+  </div>
+  
 </div>

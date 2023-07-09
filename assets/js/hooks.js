@@ -4,6 +4,7 @@ window.network = { nodes: [], edges: [] };
 let Hooks = {};
 Hooks.VisNetwork = {
   mounted() {
+    this.window = window;
     let data = JSON.parse(this.el.attributes['data_diagram_data'].value)
     this.network = this.initNetwork(this.el, data);
     this.handleEvent('update_graph', ({ nodes, edges }) => {
@@ -26,6 +27,24 @@ Hooks.VisNetwork = {
       });
       this.network.setData({ nodes, edges });
       window.network = { nodes, edges };
+      this.network.on("selectNode", params => {
+        if (this.window.ContextPanel) {
+          const nodeId = params.nodes[0];
+          const node = this.network.body.data.nodes.get(nodeId);
+          window.ContextPanel.showNode(node);
+          this.pushEvent("select_node", {node_id: nodeId});
+        }
+      });
+      
+      this.network.on("selectEdge", params => {
+        if (this.window.ContextPanel) {
+          const edgeId = params.edges[0];
+          const edge = this.network.body.data.edges.get(edgeId);
+          window.ContextPanel.showEdge(edge);
+          this.pushEvent("select_edge", {edge_id: edgeId});
+        }
+      });
+      
       // Update videos after updating network
       if (window.VideoPlayer) {
         window.VideoPlayer.blocked = true;
@@ -129,9 +148,95 @@ Hooks.VideoPlayer = {
   }
 };
 
+Hooks.ContextPanel = {
+
+  mounted() {
+    window.ContextPanel = this;
+    this.window = window;
+  },
+
+  clear() {
+    this.el.innerHTML = '';
+  },
+
+  updated() {
+    const nodeId = this.el.dataset.selectedNodeId;
+    const edgeId = this.el.dataset.selectedEdgeId;
+
+    if (nodeId) {
+      const node = window.network.nodes.find((node => node.id == nodeId))
+      this.showNode(node);
+    } else if (edgeId) {
+      const edge = window.network.edges.find({ id: nodeId });
+      
+      this.showEdge(edge);
+    }
+  },
+
+  showEdge(edge) {
+    this.el.innerHTML = `
+      <h2>Edge Information</h2>
+      <p>Edge ID: ${edge.id}</p>
+      <p>Edge From: ${edge.from}</p>
+      <p>Edge To: ${edge.to}</p>
+      <button data-action="goto">Goto</button>
+      <div>
+        <input type="text" id="tag-input" placeholder="Enter tag">
+        <button data-action="tag">Tag</button>
+      </div>
+    `;
+    let tagButton = document.querySelector('button[data-action="tag"]');
+    tagButton.addEventListener('click', function() {
+      let tagInput = document.querySelector('#tag-input');
+      let tag = tagInput.value;
+      this.pushEvent("tag_edge", {edge_id: edge.id, tag: tag});
+    });
+  },
+
+  showNode(node) {
+    let edgeList = node.edges.reduce((acc, edge) => {
+      if (edge.from == node.id) {
+        acc = `${acc} <p>Edge To: ${edge.to}</p>`
+      } else {
+        acc = `${acc} <p>Edge From: ${edge.from}</p>`
+      }
+      return acc;
+    }, `
+    <h3>Edges</h3>
+    `);
+    this.el.innerHTML = `
+      <h2>Node Information</h2>
+      <p>Node ID: ${node.id}</p>
+      <p>Node Label: ${node.label}</p>
+      ${edgeList}
+      <label>Idle Range: <input type="number" id="idle_range" name="idle_range"></label>
+      <button data-action="connect-to">Connect To</button>
+      <button data-action="make-idle">Make Idle</button>
+      <div>
+        <input type="range" id="frame-range" min="0" max="60" value="4">
+        <span id="frame-value">4</span>
+        <button class="border-2 bg-slate-500" data-action="idle">Idle Around Frame</button>
+      </div>
+    `;
+    let idleButton = document.querySelector('button[data-action="idle"]');
+    let frameRange = document.querySelector('#frame-range');
+    let frameValueSpan = document.querySelector('#frame-value');
+  
+    frameRange.addEventListener('input', function() {
+      frameValueSpan.textContent = this.value;
+    });
+  
+    idleButton.addEventListener('click', () => {
+      let frameValue = frameRange.value;
+      this.pushEvent("idle_around_frame", {src_frame: node.id, range: frameValue});
+    });
+  }
+};
+
 
 module.exports = {
   Hooks,
+  ContextPanel: Hooks.ContextPanel,
   VisNetwork: Hooks.VisNetwork,
   VideoPlayer: Hooks.VideoPlayer
 }
