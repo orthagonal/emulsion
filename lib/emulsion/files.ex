@@ -4,7 +4,6 @@ defmodule Emulsion.Files do
   # contains the source videos that we will be working from
   @appDir "e:/intro"
 
-
   @resourceTypes [:app_folder, :workspace_folder, :frame_folder, :thumbs_folder, :tween_folder, :output_folder]
   # dir structure looks like:
   # workspace_folder
@@ -25,12 +24,17 @@ defmodule Emulsion.Files do
     {:ok, %{
       path_to_original_video: "",
       workspace_folder: "",
-      video_folder: ""
+      video_folder: "",
+      working_root: ""
     }}
   end
 
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
+  end
+
+  def handle_call({:set_working_root, path_to_working_root}, _from, state) do
+    {:reply, true, %{state | working_root: path_to_working_root}}
   end
 
   def handle_call({:set_workspace_folder, path_to_original_video, working_root, path_type}, _from, state) do
@@ -60,10 +64,8 @@ defmodule Emulsion.Files do
     {:reply, state.path_to_original_video, state}
   end
 
+
   def handle_call({:get_file_list, folder_type}, _from, state) do
-    IO.puts "get_file_list"
-    IO.puts "get_file_list"
-    IO.inspect state
     path = get_folder_path(state, folder_type)
     case path do
       :error -> {:error, "Invalid folder type"}
@@ -115,17 +117,45 @@ defmodule Emulsion.Files do
   end
 
   def handle_call({:convert_disk_path_to_browser_path, disk_path}, _from, state) do
+    # IO.puts "convert_disk_path_to_browser_path #{disk_path}"
+
     # Replace backslashes with forward slashes
     forward_slash_path = String.replace(disk_path, "\\", "/")
 
     # Extract workspace folder from state
     workspace_folder = state.workspace_folder
 
-    # Replace workspace_folder with /file/video_folder
-    browser_path = String.replace(forward_slash_path, workspace_folder, "/file/#{state.video_folder}")
+    # If workspace_folder is present in disk_path, replace it. Else, return disk_path as is.
+    browser_path = cond do
+      workspace_folder != nil and workspace_folder != "" and String.contains?(forward_slash_path, workspace_folder) ->
+        # Replace workspace_folder with /file/video_folder
+        String.replace(forward_slash_path, workspace_folder, "/file/#{state.video_folder}")
 
+      true ->
+        forward_slash_path
+    end
+
+    # IO.puts "result is #{browser_path}"
     {:reply, browser_path, state}
   end
+
+  def handle_call({:convert_browser_path_to_disk_path, browser_path}, _from, state) do
+    # Replace '/file/' with workspace_folder at the beginning of the path
+    IO.puts "converting #{browser_path} to disk path"
+    disk_path = String.replace_prefix(browser_path, "/file/", "#{state.workspace_folder}/")
+    IO.puts "disk_path is #{disk_path}"
+    # Remove duplicate directory name
+    disk_path = Enum.join(
+      disk_path
+      |> String.split("/", trim: true)
+      |> Enum.dedup(),
+      "/"
+    )
+
+    # Return the converted disk_path
+    {:reply, disk_path, state}
+  end
+
 
   defp convert_thumb_path_to_frame_path(thumb_path, state) do
     relative_thumb_path = String.replace(thumb_path, ~r{^/file/\w+/thumbs/}, "")
@@ -150,6 +180,7 @@ defmodule Emulsion.Files do
   defp get_folder_path(state, folder_type, _tween_id \\ nil) do
     case folder_type do
       :app_folder -> @appDir
+      :app_thumbs_folder -> Path.join([@appDir, "thumbs"])
       :workspace_folder -> state.workspace_folder
       :frame_folder -> Path.join([state.workspace_folder, "frames"])
       :thumbs_folder -> Path.join([state.workspace_folder, "thumbs"])
@@ -165,5 +196,36 @@ defmodule Emulsion.Files do
     File.mkdir_p(Path.join([workspace_folder, "output"]))
     File.mkdir_p(Path.join([workspace_folder, "tweens"]))
     :ok
+  end
+
+  @doc """
+  the app thumbs or source thumbs are just the first frame of the original raw
+  source videos you will be drawing from
+  """
+  def handle_call({:get_app_thumbs, files}, _from, state) do
+    thumbnail_folder = Path.join([state.working_root, "source_thumbs"])
+
+    # Generate thumbnails for each video file if they do not exist
+    thumbnails = Enum.map(files, fn file ->
+      base_name = Path.rootname(file)
+      thumbnail_path = Path.join([thumbnail_folder, "#{base_name}.png"])
+      unless File.exists?(thumbnail_path) do
+        file_path = Path.join([@appDir, file])
+        Emulsion.ScriptRunner.execute_extract_one_thumb_from_video(file_path, thumbnail_path)
+        Phoenix.PubSub.broadcast(Emulsion.PubSub, "thumbnail_created", {file, thumbnail_path})
+      end
+
+      thumbnail_path
+    end)
+
+    {:reply, thumbnails, state}
+  end
+
+  @doc """
+  helper to call the above with just one file at a time
+  """
+  def get_first_frame_thumbnail(file) do
+    GenServer.call(__MODULE__, {:get_app_thumbs, [file]})
+    |> hd()
   end
 end
