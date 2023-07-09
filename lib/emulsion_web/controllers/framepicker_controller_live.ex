@@ -79,32 +79,6 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     {:noreply, assign(socket, mode: :select_dest_frame)}
   end
 
-  # respond to events from the video server
-  # format of msg is:
-  # %{
-  #   dir: "e:/emulsion_workspace/MVI_5852/frames",
-  #   file_count: 351,
-  #   watchname: "e:/emulsion_workspace?MVI_5852/frames",
-  #   watchtype: :split_video_shell_operation
-  # }
-
-  # def handle_info({:operation_complete, %{ watchtype: :split_video_shell_operation } = msg}, socket) do
-  #   thumbFiles = GenServer.call(Emulsion.Files, {:get_list_of_thumbs})
-  #   IO.inspect thumbFiles
-  #   {
-  #     :noreply,
-  #     assign(socket, %{
-  #       mode: :want_to_select_source,
-  #       thumbFiles: thumbFiles,
-  #       srcFrame: thumbFiles |> List.first,
-  #       destFrame: thumbFiles |> List.last,
-  #       selected_frames: [],
-  #       videoPath: "",
-  #       videoPreviewVisible: true
-  #     })
-  #   }
-  # end
-
   # handle the pubsub :operation_complete message
   def handle_info({:operation_complete, msg}, socket) do
     IO.inspect "operation complete"
@@ -254,5 +228,51 @@ defmodule EmulsionWeb.FramePickerControllerLive do
       |> push_event("update_graph", %{nodes: nodes, edges: edges})
 
     {:noreply, newsocket}
+  end
+
+  def handle_event("divide_by", %{"division_value" => division_value, "start_at" => start_at, "end_at" => end_at}, socket) do
+    thumbFiles = socket.assigns.thumbFiles
+    x = String.to_integer(division_value)
+    i = if(start_at != "", do: String.to_integer(start_at), else: 0)
+    j = if(end_at != "", do: String.to_integer(end_at), else: length(thumbFiles) - 1)
+    pid = self()
+
+    while_frames_divide(i, i + x, thumbFiles, x, pid, j)
+
+    {:noreply, socket}
+  end
+
+
+  defp while_frames_divide(_i, _j, _thumbFiles, _x, _pid, _max_j) when _j > _max_j, do: :ok
+
+  defp while_frames_divide(i, j, thumbFiles, x, pid, max_j) do
+    Task.start_link(fn ->
+      srcFrame = Enum.at(thumbFiles, i)
+      destFrame = Enum.at(thumbFiles, j)
+
+      # Get the actual frame file names using :get_frame_from_thumb
+      srcFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, srcFrame})
+      destFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, destFrame})
+
+      Emulsion.Video.generate_tween_and_video(srcFrame, destFrame, "5")
+      |> handle_tween_result(srcFrame, destFrame, pid)
+
+      Emulsion.Video.generate_tween_and_video(destFrame, srcFrame, "5")
+      |> handle_tween_result(destFrame, srcFrame, pid)
+    end)
+
+    while_frames_divide(i + x, j + x, thumbFiles, x, pid, max_j)
+  end
+
+  defp handle_tween_result(video_name, srcFrame, destFrame, pid) do
+    video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
+
+    # Add nodes and edge to the graph
+    Emulsion.Playgraph.add_node(srcFrame)
+    Emulsion.Playgraph.add_node(destFrame)
+    Emulsion.Playgraph.add_edge(srcFrame, destFrame, Path.basename(video_name), video_name)
+
+    # Notify the LiveView process
+    send(pid, {:tween_generated, video_name})
   end
 end

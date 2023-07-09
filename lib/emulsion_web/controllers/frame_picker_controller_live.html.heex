@@ -34,22 +34,35 @@
         <button type="submit">Load</button>
       </form>
       
-      <button class="border-2 shadow-lg bg-slate-400" phx-click="want_to_select_source">
-        Select Source Frame
-      </button>
-      <button class="border-2 shadow-lg bg-slate-400" phx-click="want_to_select_dest">
-        Select Dest Frame
-      </button>  
-      <button class="border-2 shadow-lg bg-slate-400" phx-click="set_source_to_dest">
-        Set Source Frame to Dest Frame (useful shortcut)
-      </button>
-
-      <button class="border-2 shadow-lg bg-slate-400" phx-click="generate_tween">
-        Tween Frames
-      </button>
-      <button class="border-2 shadow-lg bg-slate-400" phx-click="generate_sequence">
-        Generate Sequence
-      </button>
+      <div class="border-2 shadow-lg">
+        <h2> Macros and Shortcuts</h2>
+        <form phx-submit="divide_by">
+          <input type="text" name="division_value" placeholder="Enter division value"/>
+          <input type="text" name="start_at" placeholder="Enter start frame index"/>
+          <input type="text" name="end_at" placeholder="Enter end frame index"/>
+          <button type="submit">Divide</button>
+        </form>
+        
+        <button class="border-2 shadow-lg bg-slate-400" phx-click="set_source_to_dest">
+          Set Source Frame to Dest Frame (useful shortcut)
+        </button>
+      </div>
+      <div class="border-2 shadow-lg">
+        <h2> Manual Playgraph Functions</h2>
+        <button class="border-2 shadow-lg bg-slate-400" phx-click="want_to_select_source">
+          Select Source Frame
+        </button>
+        <button class="border-2 shadow-lg bg-slate-400" phx-click="want_to_select_dest">
+          Select Dest Frame
+        </button>  
+  
+        <button class="border-2 shadow-lg bg-slate-400" phx-click="generate_tween">
+          Tween Frames
+        </button>
+        <button class="border-2 shadow-lg bg-slate-400" phx-click="generate_sequence">
+          Generate Sequence
+        </button>
+      </div>
 
     </div>
     <div
