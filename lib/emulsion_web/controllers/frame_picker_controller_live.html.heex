@@ -42,7 +42,11 @@
           <input type="text" name="end_at" placeholder="Enter end frame index"/>
           <button type="submit">Divide</button>
         </form>
-        
+        <form phx-submit="idleize_all">
+          <input type="text" name="range" placeholder="Enter range"/>
+          <button type="submit">Idleize All</button>
+        </form>
+
         <button class="border-2 shadow-lg bg-slate-400" phx-click="set_source_to_dest">
           Set Source Frame to Dest Frame (useful shortcut)
         </button>

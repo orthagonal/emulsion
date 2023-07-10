@@ -364,4 +364,15 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     end)
   end
 
+  def handle_event("idleize_all", %{"range" => range}, socket) do
+    Task.start_link(fn ->
+      # Get nodes
+      nodes = GenServer.call(Emulsion.Playgraph, {:get_nodes})
+      # Loop through the nodes
+      Enum.each(nodes, fn node ->
+        handle_event("idle_around_frame", %{"src_frame" => node["id"], "range" => range}, socket)
+      end)
+    end)
+    {:noreply, socket}
+  end
 end
