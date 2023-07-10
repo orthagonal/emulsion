@@ -7,57 +7,121 @@ Hooks.VisNetwork = {
     this.window = window;
     let data = JSON.parse(this.el.attributes['data_diagram_data'].value)
     this.network = this.initNetwork(this.el, data);
-    this.handleEvent('update_graph', ({ nodes, edges }) => {
-      // Filter nodes and edges to remove duplicates based on 'id'
-      const uniqueNodeIds = new Set();
-      nodes = nodes.filter(node => {
-        if (!uniqueNodeIds.has(node.id)) {
-          uniqueNodeIds.add(node.id);
-          return true;
-        }
-        return false;
-      });
-      const uniqueEdgeIds = new Set();
-      edges = edges.filter(edge => {
-        if (!uniqueEdgeIds.has(edge.id)) {
-          uniqueEdgeIds.add(edge.id);
-          return true;
-        }
-        return false;
-      });
+
+    // Add a buffer to store updates
+    this.buffer = { nodes: [], edges: [] };
+    // Start a 5-second timer
+    this.updateTimer = setInterval(() => {
+      // Apply all changes in the buffer at once
+      if (this.buffer.nodes.length > 0 || this.buffer.edges.length > 0) {
+        // Empty the buffer
+        let nodes = this.buffer.nodes;
+        let edges = this.buffer.edges;
+        const uniqueNodeIds = new Set();
+        nodes = nodes.filter(node => {
+          if (!uniqueNodeIds.has(node.id)) {
+            uniqueNodeIds.add(node.id);
+            return true;
+          }
+          return false;
+        });
+        const uniqueEdgeIds = new Set();
+        edges = edges.filter(edge => {
+          if (!uniqueEdgeIds.has(edge.id)) {
+            uniqueEdgeIds.add(edge.id);
+            return true;
+          }
+          return false;
+        });
       this.network.setData({ nodes, edges });
-      window.network = { nodes, edges };
-      this.network.on("selectNode", params => {
-        if (this.window.ContextPanel) {
-          const nodeId = params.nodes[0];
-          const node = this.network.body.data.nodes.get(nodeId);
-          window.ContextPanel.showNode(node);
-          this.pushEvent("select_node", {node_id: nodeId});
+        window.network = { nodes, edges };
+
+        this.network.on("selectNode", params => {
+          if (this.window.ContextPanel) {
+            const nodeId = params.nodes[0];
+            const node = this.network.body.data.nodes.get(nodeId);
+            window.ContextPanel.showNode(node);
+            this.pushEvent("select_node", {node_id: nodeId});
+          }
+        });
+        
+        this.network.on("selectEdge", params => {
+          if (this.window.ContextPanel) {
+            const edgeId = params.edges[0];
+            const edge = this.network.body.data.edges.get(edgeId);
+            window.ContextPanel.showEdge(edge);
+            this.pushEvent("select_edge", {edge_id: edgeId});
+          }
+        });
+        if (window.VideoPlayer) {
+          window.VideoPlayer.blocked = true;
+          window.VideoPlayer.resetVideos();
         }
-      });
-      
-      this.network.on("selectEdge", params => {
-        if (this.window.ContextPanel) {
-          const edgeId = params.edges[0];
-          const edge = this.network.body.data.edges.get(edgeId);
-          window.ContextPanel.showEdge(edge);
-          this.pushEvent("select_edge", {edge_id: edgeId});
-        }
-      });
-      
-      // Update videos after updating network
-      if (window.VideoPlayer) {
-        window.VideoPlayer.blocked = true;
-        window.VideoPlayer.resetVideos();
+        this.buffer = { nodes: [], edges: [] };
       }
+    }, 5000);
+
+    this.handleEvent('update_graph', ({ nodes, edges }) => {
+      // Add updates to the buffer instead of immediately applying them
+      this.buffer.nodes = [...this.buffer.nodes, ...nodes];
+      this.buffer.edges = [...this.buffer.edges, ...edges];
     });
   },
+
+  // Make sure to clear the timer when the component is unmounted
+  destroyed() {
+    clearInterval(this.updateTimer);
+  },
+    // this.handleEvent('update_graph', ({ nodes, edges }) => {
+    //   // Filter nodes and edges to remove duplicates based on 'id'
+    //   const uniqueNodeIds = new Set();
+    //   nodes = nodes.filter(node => {
+    //     if (!uniqueNodeIds.has(node.id)) {
+    //       uniqueNodeIds.add(node.id);
+    //       return true;
+    //     }
+    //     return false;
+    //   });
+    //   const uniqueEdgeIds = new Set();
+    //   edges = edges.filter(edge => {
+    //     if (!uniqueEdgeIds.has(edge.id)) {
+    //       uniqueEdgeIds.add(edge.id);
+    //       return true;
+    //     }
+    //     return false;
+    //   });
+      // this.network.setData({ nodes, edges });
+      // window.network = { nodes, edges };
+      // this.network.on("selectNode", params => {
+      //   if (this.window.ContextPanel) {
+      //     const nodeId = params.nodes[0];
+      //     const node = this.network.body.data.nodes.get(nodeId);
+      //     window.ContextPanel.showNode(node);
+      //     this.pushEvent("select_node", {node_id: nodeId});
+      //   }
+      // });
+      
+      // this.network.on("selectEdge", params => {
+      //   if (this.window.ContextPanel) {
+      //     const edgeId = params.edges[0];
+      //     const edge = this.network.body.data.edges.get(edgeId);
+      //     window.ContextPanel.showEdge(edge);
+      //     this.pushEvent("select_edge", {edge_id: edgeId});
+      //   }
+      // });
+      
+      // Update videos after updating network
+  // },
   initNetwork(el, data) {
     const nodes = new DataSet(data.nodes)
     const edges = new DataSet(data.edges);
     const container = el;
     const diagram = { nodes, edges };
-    const options = {};
+    const options = {
+      layout: {
+        improvedLayout: false,
+      }
+    };
     return new Network(container, diagram, options);
   },
 };
@@ -65,6 +129,7 @@ Hooks.VideoPlayer = {
   mounted() {
     window.VideoPlayer = this; // Expose this object to the global scope
 
+    this.queuedVideo = null; // Initially, there is no queued video
     this.videoA = this.el.querySelector("#videoA");
     this.videoB = this.el.querySelector("#videoB");
     this.blocked = false; // Initially, the player is not blocked
@@ -81,10 +146,30 @@ Hooks.VideoPlayer = {
     this.videoB.onended = () => this.switchVideos(this.videoB, this.videoA);
   },
 
+  queueVideo(videoSrc) {
+    this.queuedVideo = videoSrc;
+    if (this.videoA.paused && this.videoB.paused) {
+      this.videoA.src = this.queuedVideo;
+      this.queuedVideo = null; // Clear queued video after setting it
+      this.videoA.play();
+    }
+  },
+
   async switchVideos(currentVideo, nextVideo) {
     if (this.blocked) return;
-    const videoName = currentVideo.src;
-    const nextEdge = await this.getNextEdge(videoName);
+    let nextEdge;
+    if (this.queuedVideo) {
+      nextVideo.src = this.queuedVideo;
+      this.queuedVideo = null;  // Clear queued video after setting it
+      nextEdge = { path: this.queuedVideo };  // The queued video becomes the nextEdge
+    } else {
+      const videoName = currentVideo.src;
+      nextEdge = await this.getNextEdge(videoName);
+      if (nextEdge) {
+        nextVideo.src = nextEdge.path;
+      }
+    }
+
     if (nextEdge) {
       nextVideo.src = nextEdge.path;
       nextVideo.oncanplaythrough = () => {
@@ -113,7 +198,6 @@ Hooks.VideoPlayer = {
     this.blocked = false;
     this.setupEventHandlers();
   },
-
 
   getNextEdge (videoName) {
     return new Promise((resolve, reject) => {
@@ -174,6 +258,7 @@ Hooks.ContextPanel = {
   },
 
   showEdge(edge) {
+    const tagList = edge.tags ? edge.tags.join(', ') : '';
     this.el.innerHTML = `
       <h2>Edge Information</h2>
       <p>Edge ID: ${edge.id}</p>
@@ -184,12 +269,20 @@ Hooks.ContextPanel = {
         <input type="text" id="tag-input" placeholder="Enter tag">
         <button data-action="tag">Tag</button>
       </div>
+      <div id="tag-list">
+        <h3>Tags</h3>
+        <p>${tagList}</p>
     `;
     let tagButton = document.querySelector('button[data-action="tag"]');
+    let self = this;
     tagButton.addEventListener('click', function() {
       let tagInput = document.querySelector('#tag-input');
       let tag = tagInput.value;
-      this.pushEvent("tag_edge", {edge_id: edge.id, tag: tag});
+      self.pushEvent("tag_edge", {edge_id: edge.id, tag: tag});
+    });
+    let gotoButton = document.querySelector('button[data-action="goto"]');
+    gotoButton.addEventListener('click', () => {
+      window.VideoPlayer.queueVideo(edge.path);
     });
   },
 

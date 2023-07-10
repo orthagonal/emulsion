@@ -244,17 +244,16 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     i = if(start_at != "", do: String.to_integer(start_at), else: 0)
     j = if(end_at != "", do: String.to_integer(end_at), else: length(thumbFiles) - 1)
     pid = self()
-
-    while_frames_divide(i, i + x, thumbFiles, x, pid, j)
+    Task.start_link(fn ->
+      while_frames_divide(i, i + x, thumbFiles, x, pid, j)
+    end)
 
     {:noreply, socket}
   end
 
-
   defp while_frames_divide(_i, _j, _thumbFiles, _x, _pid, _max_j) when _j > _max_j, do: :ok
 
   defp while_frames_divide(i, j, thumbFiles, x, pid, max_j) do
-    Task.start_link(fn ->
       srcFrame = Enum.at(thumbFiles, i)
       destFrame = Enum.at(thumbFiles, j)
 
@@ -267,9 +266,8 @@ defmodule EmulsionWeb.FramePickerControllerLive do
 
       Emulsion.Video.generate_tween_and_video(destFrame, srcFrame, "5")
       |> handle_tween_result(destFrame, srcFrame, pid)
-    end)
 
-    while_frames_divide(i + x, j + x, thumbFiles, x, pid, max_j)
+      while_frames_divide(i + x, j + x, thumbFiles, x, pid, max_j)
   end
 
   defp handle_tween_result(video_name, srcFrame, destFrame, pid) do
@@ -293,8 +291,10 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     {:noreply, assign(socket, selected_edge_id: edge_id)}
   end
 
-  def handle_event("add_tag", %{  "edge_id" => edge_id, "tag" => tag }, socket) do
-    Playgraph.add_tag(edge_id, tag)
+  def handle_event("tag_edge", %{  "edge_id" => edge_id, "tag" => tag }, socket) do
+    Emulsion.Playgraph.tag_edge(edge_id, tag)
+    IO.puts "display it"
+    IO.inspect Emulsion.Playgraph.get_edges()
     {:noreply, socket}
   end
 
@@ -322,6 +322,7 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     Task.start_link(fn ->
       case direction do
         :forward ->
+          # forward to the new frame:
           dest_frame_num = frame_num + range
           dest_frame = String.replace(src_frame, "#{frame_num}", "#{dest_frame_num}")
           video_name = GenServer.call(Emulsion.Video, {:generate_tween_and_video, src_frame, dest_frame, "5"}, 999_999)
@@ -329,8 +330,19 @@ defmodule EmulsionWeb.FramePickerControllerLive do
           video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
           Emulsion.Playgraph.add_node(dest_frame)
           Emulsion.Playgraph.add_edge(src_frame, dest_frame, basename, video_name)
+          Emulsion.Playgraph.tag_edge(basename, "idle")
           send(pid, {:tween_generated, video_name})
+
+          # and back to the original frame:
+          video_name = GenServer.call(Emulsion.Video, {:generate_tween_and_video, dest_frame, src_frame, "5"}, 999_999)
+          basename = Path.basename(video_name)
+          video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
+          Emulsion.Playgraph.add_edge(dest_frame, src_frame, basename, video_name)
+          Emulsion.Playgraph.tag_edge(basename, "idle")
+          send(pid, {:tween_generated, video_name})
+
         :backward ->
+          # forward to the new frame:
           dest_frame_num = frame_num - range
           dest_frame = String.replace(src_frame, "#{frame_num}", "#{dest_frame_num}")
           video_name = GenServer.call(Emulsion.Video, {:generate_tween_and_video, src_frame, dest_frame, "5"}, 999_999)
@@ -338,6 +350,15 @@ defmodule EmulsionWeb.FramePickerControllerLive do
           video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
           Emulsion.Playgraph.add_node(dest_frame)
           Emulsion.Playgraph.add_edge(src_frame, dest_frame, basename, video_name)
+          Emulsion.Playgraph.tag_edge(basename, "idle")
+          send(pid, {:tween_generated, video_name})
+
+          # and back to the original frame:
+          video_name = GenServer.call(Emulsion.Video, {:generate_tween_and_video, dest_frame, src_frame, "5"}, 999_999)
+          basename = Path.basename(video_name)
+          video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
+          Emulsion.Playgraph.add_edge(dest_frame, src_frame, basename, video_name)
+          Emulsion.Playgraph.tag_edge(basename, "idle")
           send(pid, {:tween_generated, video_name})
         end
     end)
