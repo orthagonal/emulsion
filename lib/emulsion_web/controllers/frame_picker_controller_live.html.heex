@@ -47,6 +47,15 @@
           <button type="submit">Idleize All</button>
         </form>
 
+        <!-- Idleify Frame Form -->
+        <form phx-submit="idleify_frame">
+          <input type="hidden" name="current_frame" value={@srcFrame}/>
+          <input type="hidden" name="connect_frame" value={@destFrame}/>
+          <input type="number" name="idle_range" placeholder="Enter idle range"/>
+          <button type="submit">Idleify Frame</button>
+        </form>
+
+
         <button class="border-2 shadow-lg bg-slate-400" phx-click="set_source_to_dest">
           Set Source Frame to Dest Frame (useful shortcut)
         </button>
@@ -107,13 +116,16 @@
         </div>
       </div>
     
+      <div>
+        <input id="scroll_to_thumb" type="text" phx-hook="ScrollToThumb" placeholder="Type to scroll..."/>
+    </div>
       <div id="right-column" class="w-3/4 overflow-auto">
-        <div class="flex-1 overflow-y-scroll grid grid-cols-4">
+        <div class="flex-1 overflow-y-scroll grid grid-cols-4" id="thumbGrid">
           <div :for={thumb <- @thumbFiles} class="border-2 relative" phx-click="click_frame", phx-value-frame={thumb}>
-            <p class="text-xs z-10 absolute top-0 left-0 bg-white"><%= thumb |> Path.basename %></p> 
-            <img class="w-full h-full object-cover" src={thumb}>
+              <p class="text-xs z-10  bg-white"><%= thumb |> Path.basename %></p> 
+              <img class="w-full h-full object-cover" src={thumb} >
           </div>
-        </div>
+      </div>
       </div>
     </div>
   </div>

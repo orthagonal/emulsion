@@ -35,7 +35,7 @@ defmodule Emulsion.Video do
     video_path = GenServer.call(Emulsion.Files, {:get_original_video})
     IO.puts "paths are #{video_path} #{frames_path} #{thumbs_path}"
     with [] <- GenServer.call(Emulsion.Files, {:get_file_list, :frame_folder}) do
-        IO.puts "i am splitting the video into frames and thumbs"
+        IO.puts "i am splitting the video into frames and thumbs, launching external script now"
         Emulsion.ScriptRunner.execute_split_video_into_frames(video_path, frames_path)
         Emulsion.ScriptRunner.execute_split_video_into_thumbs(video_path, thumbs_path)
         # return the list of thumbs
@@ -44,7 +44,7 @@ defmodule Emulsion.Video do
         {:reply, thumbs_list, state}
     else
       _ ->
-        IO.puts "for some reason I think they already exist?????"
+        IO.puts "I have already split the #{video_path}  video into frames and thumbs"
         thumbs_list = GenServer.call(Emulsion.Files, {:get_file_list, :thumbs_folder, :browser})
         {:reply, thumbs_list, state}
     end
@@ -56,6 +56,10 @@ defmodule Emulsion.Video do
         videos = GenServer.call(Emulsion.Files, {:get_file_list, :app_folder})
           |> Enum.filter(fn file -> Path.extname(file) == ".MOV" end)
         {:reply, videos, state}
+      :source_thumbs ->
+        frames = GenServer.call(Emulsion.Files, {:get_file_list, :app_thumbs_folder})
+        |> Enum.filter(fn file -> Path.extname(file) == ".png" end)
+        {:reply, frames, state}
       :video -> {:reply, GenServer.call(Emulsion.Files, {:get_file_list, :output_folder}), state}
       :frame -> {:reply, GenServer.call(Emulsion.Files, {:get_file_list, :frame_folder}), state}
       :thumb_frame -> {:reply, GenServer.call(Emulsion.Files, {:get_file_list, :thumbs_folder}), state}
@@ -64,15 +68,8 @@ defmodule Emulsion.Video do
     end
   end
 
-  def handle_call({:get_resource, name, resource_type, path_type}, _from, state) do
-    case resource_type do
-      :source -> GenServer.call(Emulsion.Files, {:get_file_from_directory, name, path_type, :workspace_folder})
-      :video -> GenServer.call(Emulsion.Files, {:get_file_from_directory, name, path_type, :output_folder})
-      :frame -> GenServer.call(Emulsion.Files, {:get_file_from_directory, name, path_type, :frame_folder})
-      :thumb_frame -> GenServer.call(Emulsion.Files, {:get_file_from_directory, name, path_type, :thumbs_folder})
-      :tween -> GenServer.call(Emulsion.Files, {:get_file_from_directory, name, path_type, :tween_folder})
-      _ -> {:error, "Invalid resource type"}
-    end
+  def generate_tween_and_video(src_frame, dest_frame, tween_length) do
+    GenServer.call(__MODULE__, {:generate_tween_and_video, src_frame, dest_frame, tween_length}, 999_999)
   end
 
   def handle_call({:generate_tween_and_video, src_frame, dest_frame, tween_length}, _from, state) do
@@ -82,8 +79,14 @@ defmodule Emulsion.Video do
     src_framebase = Path.basename(src_frame, Path.extname(src_frame))
     dest_framebase = Path.basename(dest_frame, Path.extname(dest_frame))
     output_file = Path.join(output_dir, "#{src_framebase}_to_#{dest_framebase}.#{@videoFormat}")
-    Emulsion.ScriptRunner.execute_generate_tween_video(src_frame, dest_frame, tween_length, output_file)
-    {:reply, output_file, state}
+    # if the tween already exists then notify and just return the file name:
+    if File.exists?(output_file) do
+      IO.puts "Tween already exists, returning #{output_file}"
+      {:reply, output_file, state}
+    else
+      IO.puts "Tween does not exist, generating #{output_file}"
+      Emulsion.ScriptRunner.execute_generate_tween_video(src_frame, dest_frame, tween_length, output_file)
+      {:reply, output_file, state}
+      end
   end
-
 end

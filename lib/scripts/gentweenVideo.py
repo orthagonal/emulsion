@@ -19,6 +19,9 @@ output_file = sys.argv[5].strip()
 
 Args = namedtuple('Args', ['img', 'exp', 'ratio', 'rthreshold', 'rmaxcycles', 'modelDir', 'folderOut'])
 
+print("**************************************************************************************************************************************")
+print("Source frame: " + src_frame + " Destination frame: " + dest_frame + " Tween exponent: " + str(tween_exp) + " Output file: " + output_file)
+print("**************************************************************************************************************************************")
 args = Args(
     img=[src_frame, dest_frame],
     exp=tween_exp,
@@ -67,6 +70,12 @@ model.device()
 if args.img[0].endswith('.exr') and args.img[1].endswith('.exr'):
     img0 = cv2.imread(args.img[0], cv2.IMREAD_COLOR | cv2.IMREAD_ANYDEPTH)
     img1 = cv2.imread(args.img[1], cv2.IMREAD_COLOR | cv2.IMREAD_ANYDEPTH)
+    if (img0 is None):
+        print("Error reading file: " + args.img[0])
+        exit(1)
+    if (img1 is None):
+        print("Error reading file: " + args.img[0])
+        exit(1)
     img0 = (torch.tensor(img0.transpose(2, 0, 1)).to(device)).unsqueeze(0)
     img1 = (torch.tensor(img1.transpose(2, 0, 1)).to(device)).unsqueeze(0)
 

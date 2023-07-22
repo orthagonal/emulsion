@@ -326,10 +326,31 @@ Hooks.ContextPanel = {
   }
 };
 
+Hooks.ScrollToThumb = {
+  mounted() {
+    this.el.addEventListener("input", event => {
+      console.log(event.target.value);
+      let searchStr = event.target.value;
+      if (searchStr) {
+          let thumbEls = document.querySelectorAll("#thumbGrid img");
+          let rightColumn = document.querySelector("#right-column");
+          for (let i = 0; i < thumbEls.length; i++) {
+              let thumbEl = thumbEls[i];
+              if (thumbEl.src.includes(searchStr)) {
+                  rightColumn.scrollTop = thumbEl.offsetParent.offsetTop - rightColumn.offsetTop;
+                  break;
+              }
+          }
+      }
+  });
+}
+
+}
 
 module.exports = {
   Hooks,
   ContextPanel: Hooks.ContextPanel,
   VisNetwork: Hooks.VisNetwork,
-  VideoPlayer: Hooks.VideoPlayer
+  VideoPlayer: Hooks.VideoPlayer,
+  ScrollToThumb: Hooks.ScrollToThumb
 }
