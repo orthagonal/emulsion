@@ -204,38 +204,89 @@ defmodule Emulsion.Playgraph do
   def handle_call(
         {:add_edge, src_node_name, destination_node_name, edge_id, path_to_video},
         _from,
-        state
+        %{"nodes" => nodes} = state
       ) do
-    nodes =
-      Enum.map(state["nodes"], fn node ->
-        if node["name"] == src_node_name do
-          IO.puts(":add_edge found from #{src_node_name} to #{destination_node_name}")
+    case find_node(src_node_name, nodes) do
+      {:ok, node} ->
+        updated_edge = create_edge(src_node_name, destination_node_name, edge_id, path_to_video)
 
-          edge = %{
-            "from" => src_node_name,
-            "to" => destination_node_name,
-            "id" => edge_id,
-            "destination" => destination_node_name,
-            "fromPath" =>
-              GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, src_node_name}),
-            "toPath" =>
-              GenServer.call(
-                Emulsion.Files,
-                {:convert_disk_path_to_browser_path, destination_node_name}
-              ),
-            "path" =>
-              GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, path_to_video})
-          }
+        updated_node = Map.put(node, "edges", [updated_edge | node["edges"]])
 
-          Map.put(node, "edges", [edge | node["edges"]])
-        else
-          IO.puts(":add_edge didn't find #{src_node_name} in #{node["name"]}")
-          node
-        end
-      end)
+        nodes = replace_node_in_list(updated_node, nodes)
 
-    {:reply, :ok, Map.put(state, "nodes", nodes)}
+        {:reply, :ok, Map.put(state, "nodes", nodes)}
+
+      {:error, :not_found} ->
+        {:reply, {:error, "Source node not found"}, state}
+    end
   end
+
+  defp find_node(node_name, nodes) do
+    case Enum.find(nodes, fn node -> node["name"] == node_name end) do
+      nil -> {:error, :not_found}
+      node -> {:ok, node}
+    end
+  end
+
+  defp create_edge(src_node_name, destination_node_name, edge_id, path_to_video) do
+    %{
+      "from" => src_node_name,
+      "to" => destination_node_name,
+      "id" => edge_id,
+      "destination" => destination_node_name,
+      "fromPath" =>
+        GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, src_node_name}),
+      "toPath" =>
+        GenServer.call(
+          Emulsion.Files,
+          {:convert_disk_path_to_browser_path, destination_node_name}
+        ),
+      "path" =>
+        GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, path_to_video})
+    }
+  end
+
+  defp replace_node_in_list(updated_node, nodes) do
+    Enum.map(nodes, fn node ->
+      if node["name"] == updated_node["name"], do: updated_node, else: node
+    end)
+  end
+
+  # def handle_call(
+  #       {:add_edge, src_node_name, destination_node_name, edge_id, path_to_video},
+  #       _from,
+  #       state
+  #     ) do
+  #   nodes =
+  #     Enum.map(state["nodes"], fn node ->
+  #       if node["name"] == src_node_name do
+  #         IO.puts(":add_edge found from #{src_node_name} to #{destination_node_name}")
+
+  #         edge = %{
+  #           "from" => src_node_name,
+  #           "to" => destination_node_name,
+  #           "id" => edge_id,
+  #           "destination" => destination_node_name,
+  #           "fromPath" =>
+  #             GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, src_node_name}),
+  #           "toPath" =>
+  #             GenServer.call(
+  #               Emulsion.Files,
+  #               {:convert_disk_path_to_browser_path, destination_node_name}
+  #             ),
+  #           "path" =>
+  #             GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, path_to_video})
+  #         }
+
+  #         Map.put(node, "edges", [edge | node["edges"]])
+  #       else
+  #         IO.puts(":add_edge didn't find #{src_node_name} in #{node["name"]}")
+  #         node
+  #       end
+  #     end)
+
+  #   {:reply, :ok, Map.put(state, "nodes", nodes)}
+  # end
 
   def handle_call({:delete_edge, node_name, edge_id}, _from, state) do
     nodes =

@@ -375,7 +375,7 @@ defmodule EmulsionWeb.FramePickerControllerLive do
         },
         socket
       ) do
-    case Emulsion.Idioms.idleify_frame(current_frame, idle_range, connect_frame, socket, self()) do
+    case Emulsion.Idioms.idleify_frame(current_frame, idle_range, connect_frame, self()) do
       {:ok, _} ->
         {:noreply, socket}
 

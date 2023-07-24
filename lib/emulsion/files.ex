@@ -208,9 +208,15 @@ defmodule Emulsion.Files do
   end
 
   defp convert_thumb_path_to_frame_path(thumb_path, state) do
-    relative_thumb_path = String.replace(thumb_path, ~r{^/file/\w+/thumbs/}, "")
-    frame_folder = get_folder_path(state, :frame_folder)
-    Path.join([frame_folder, relative_thumb_path])
+    # If path is already in the correct format
+    if String.starts_with?(thumb_path, "/file/") and String.contains?(thumb_path, "/frames/") do
+      thumb_path
+    else
+      # Existing logic
+      relative_thumb_path = String.replace(thumb_path, ~r{^/file/\w+/thumbs/}, "")
+      frame_folder = get_folder_path(state, :frame_folder)
+      Path.join([frame_folder, relative_thumb_path])
+    end
   end
 
   defp print_folder_type(type) when is_binary(type) do
