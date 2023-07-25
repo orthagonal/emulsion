@@ -276,43 +276,6 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     {:noreply, newsocket}
   end
 
-  def handle_event(
-        "divide_by",
-        %{"division_value" => division_value, "start_at" => start_at, "end_at" => end_at},
-        socket
-      ) do
-    thumbFiles = socket.assigns.thumbFiles
-    x = String.to_integer(division_value)
-    i = if(start_at != "", do: String.to_integer(start_at), else: 0)
-    j = if(end_at != "", do: String.to_integer(end_at), else: length(thumbFiles) - 1)
-    pid = self()
-
-    Task.start_link(fn ->
-      while_frames_divide(i, i + x, thumbFiles, x, pid, j)
-    end)
-
-    {:noreply, socket}
-  end
-
-  defp while_frames_divide(_i, _j, _thumbFiles, _x, _pid, _max_j) when _j > _max_j, do: :ok
-
-  defp while_frames_divide(i, j, thumbFiles, x, pid, max_j) do
-    srcFrame = Enum.at(thumbFiles, i)
-    destFrame = Enum.at(thumbFiles, j)
-
-    # Get the actual frame file names using :get_frame_from_thumb
-    srcFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, srcFrame})
-    destFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, destFrame})
-
-    Emulsion.Video.generate_tween_and_video(srcFrame, destFrame, "5")
-    |> handle_tween_result(srcFrame, destFrame, pid)
-
-    Emulsion.Video.generate_tween_and_video(destFrame, srcFrame, "5")
-    |> handle_tween_result(destFrame, srcFrame, pid)
-
-    while_frames_divide(i + x, j + x, thumbFiles, x, pid, max_j)
-  end
-
   defp handle_tween_result(video_name, srcFrame, destFrame, pid) do
     video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
 

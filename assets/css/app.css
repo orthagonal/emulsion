@@ -3,3 +3,7 @@
 @import "tailwindcss/utilities";
 
 /* This file is for your main application CSS */
+button {
+  border: 1px solid #ccc;
+  padding: 5px 10px;
+}

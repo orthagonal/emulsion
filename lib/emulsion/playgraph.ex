@@ -252,42 +252,6 @@ defmodule Emulsion.Playgraph do
     end)
   end
 
-  # def handle_call(
-  #       {:add_edge, src_node_name, destination_node_name, edge_id, path_to_video},
-  #       _from,
-  #       state
-  #     ) do
-  #   nodes =
-  #     Enum.map(state["nodes"], fn node ->
-  #       if node["name"] == src_node_name do
-  #         IO.puts(":add_edge found from #{src_node_name} to #{destination_node_name}")
-
-  #         edge = %{
-  #           "from" => src_node_name,
-  #           "to" => destination_node_name,
-  #           "id" => edge_id,
-  #           "destination" => destination_node_name,
-  #           "fromPath" =>
-  #             GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, src_node_name}),
-  #           "toPath" =>
-  #             GenServer.call(
-  #               Emulsion.Files,
-  #               {:convert_disk_path_to_browser_path, destination_node_name}
-  #             ),
-  #           "path" =>
-  #             GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, path_to_video})
-  #         }
-
-  #         Map.put(node, "edges", [edge | node["edges"]])
-  #       else
-  #         IO.puts(":add_edge didn't find #{src_node_name} in #{node["name"]}")
-  #         node
-  #       end
-  #     end)
-
-  #   {:reply, :ok, Map.put(state, "nodes", nodes)}
-  # end
-
   def handle_call({:delete_edge, node_name, edge_id}, _from, state) do
     nodes =
       Enum.map(state["nodes"], fn node ->
@@ -301,6 +265,10 @@ defmodule Emulsion.Playgraph do
       end)
 
     {:reply, :ok, Map.put(state, "nodes", nodes)}
+  end
+
+  def tag_edge(edge_id, tag) when is_list(tag) do
+    Enum.map(tag, fn tag -> tag_edge(edge_id, tag) end)
   end
 
   def tag_edge(edge_id, tag) do

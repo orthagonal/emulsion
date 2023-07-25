@@ -128,7 +128,7 @@ Hooks.VisNetwork = {
 Hooks.VideoPlayer = {
   mounted() {
     window.VideoPlayer = this; // Expose this object to the global scope
-
+    window.nextSelectedEdge = null; // if there is a next edge to play, this is it, default is to play the any 'idle' edge
     this.queuedVideo = null; // Initially, there is no queued video
     this.videoA = this.el.querySelector("#videoA");
     this.videoB = this.el.querySelector("#videoB");
@@ -198,28 +198,64 @@ Hooks.VideoPlayer = {
     this.blocked = false;
     this.setupEventHandlers();
   },
-
-  getNextEdge (videoName) {
-    return new Promise((resolve, reject) => {
-      const checkEdges = () => {
-        if (window.network.edges.length > 0) {
-          const edge = window.network.edges.find(edge => videoName.endsWith(edge.path));
-          if (!edge) {
-            return false;
-          }
-          const curNodeId = edge.to;
-          // Pick a random edge from the list of edges
-          const validEdges = window.network.edges.filter(edge => edge.from === curNodeId);
-          const nextEdge = validEdges[Math.floor(Math.random() * validEdges.length)];
-          resolve(nextEdge);
-        } else {
-          setTimeout(checkEdges, 100);
-        }
-      }
-      checkEdges();
+  
+  createButton(edge) {
+    const button = document.createElement('button');
+    button.textContent = edge.tags ? edge.tags.join(',') : '(' + edge.id + ")";
+    button.addEventListener('click', () => {
+      window.nextSelectedEdge = edge.id;
     });
+    return button;
   },
 
+  getNextEdge(videoName) {
+    let edge = window.network.edges.find(edge => videoName.endsWith(edge.path));
+    if (!edge) {
+      return null;
+    }
+  
+    const curNodeId = edge.to;
+    const outgoingEdges = window.network.edges.filter(edge => edge.from === curNodeId);
+  
+    // Remove any previously generated buttons
+    const container = document.getElementById('buttons-container');
+    while (container.firstChild) {
+      container.firstChild.remove();
+    }
+  
+    // Create a button for each outgoing edge
+    outgoingEdges.forEach(edge => {
+      const button = this.createButton(edge);
+      container.appendChild(button);
+    });
+  
+    let nextEdge = null;
+  
+    // If 'nextSelectedEdge' is defined, find the corresponding edge by id or tag
+    if (window.nextSelectedEdge) {
+      // nextEdge = outgoingEdges.find(edge => edge.id === window.nextSelectedEdge);
+      nextEdge = window.network.edges.find(edge => edge.id === window.nextSelectedEdge);
+      if (!nextEdge) {
+        nextEdge = outgoingEdges.find(edge => edge.tags && edge.tags.includes(window.nextSelectedEdge));
+      }
+    }
+  
+    // If no edge was selected or 'nextSelectedEdge' didn't match any edge, find an 'idle' edge
+    if (!nextEdge) {
+      nextEdge = outgoingEdges.find(edge => edge.tags && edge.tags.includes('idle'));
+    }
+  
+    // If no idle edge found, just pick the first one
+    if (!nextEdge) {
+      nextEdge = outgoingEdges[0];
+    }
+  
+    // Reset 'nextSelectedEdge'
+    window.nextSelectedEdge = null;
+  
+    return nextEdge;
+  },
+  
   updated() {
     const nextVideoA = this.el.dataset.nextVideoA;
     const nextVideoB = this.el.dataset.nextVideoB;
@@ -231,6 +267,11 @@ Hooks.VideoPlayer = {
     }
   }
 };
+
+// next up: 
+// add a panel that lists the idle options for the current node and auto-plays idle videos attached to it
+// automatically play idle frames on infinite loop, allow option to go to 'next' which means transitioning to new node/list of edges
+// clicking the node goes to that frame
 
 Hooks.ContextPanel = {
 
