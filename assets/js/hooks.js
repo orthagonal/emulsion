@@ -8,9 +8,10 @@ Hooks.VisNetwork = {
     let data = JSON.parse(this.el.attributes['data_diagram_data'].value)
     this.network = this.initNetwork(this.el, data);
 
+
     // Add a buffer to store updates
     this.buffer = { nodes: [], edges: [] };
-    // Start a 5-second timer
+    // Start a  timer so that large graphs don't overload everything
     this.updateTimer = setInterval(() => {
       // Apply all changes in the buffer at once
       if (this.buffer.nodes.length > 0 || this.buffer.edges.length > 0) {
@@ -45,11 +46,21 @@ Hooks.VisNetwork = {
           }
         });
         
+        // when they hover, show the id of the edge
+        this.network.on('hoverEdge', params => {
+          const edgeId = params.edge;
+          const edge = this.network.body.data.edges.get(edgeId);
+          const label = edge.tags ? edge.tags.join(',') : edge.id;
+          this.network.body.data.edges.update({id: edgeId, label: label});
+        });
+
         this.network.on("selectEdge", params => {
           if (this.window.ContextPanel) {
             const edgeId = params.edges[0];
             const edge = this.network.body.data.edges.get(edgeId);
             window.ContextPanel.showEdge(edge);
+            // Set nextSelectedEdge on window object
+            window.nextSelectedEdge = edgeId;
             this.pushEvent("select_edge", {edge_id: edgeId});
           }
         });
@@ -59,9 +70,14 @@ Hooks.VisNetwork = {
         }
         this.buffer = { nodes: [], edges: [] };
       }
-    }, 5000);
+    }, 2500);
 
     this.handleEvent('update_graph', ({ nodes, edges }) => {
+      // Attach a title to each edge if it doesn't already have one
+      edges.forEach(edge => {
+        edge.label = edge.tags ? edge.tags.join(',') : edge.id;
+      });
+
       // Add updates to the buffer instead of immediately applying them
       this.buffer.nodes = [...this.buffer.nodes, ...nodes];
       this.buffer.edges = [...this.buffer.edges, ...edges];
@@ -72,52 +88,22 @@ Hooks.VisNetwork = {
   destroyed() {
     clearInterval(this.updateTimer);
   },
-    // this.handleEvent('update_graph', ({ nodes, edges }) => {
-    //   // Filter nodes and edges to remove duplicates based on 'id'
-    //   const uniqueNodeIds = new Set();
-    //   nodes = nodes.filter(node => {
-    //     if (!uniqueNodeIds.has(node.id)) {
-    //       uniqueNodeIds.add(node.id);
-    //       return true;
-    //     }
-    //     return false;
-    //   });
-    //   const uniqueEdgeIds = new Set();
-    //   edges = edges.filter(edge => {
-    //     if (!uniqueEdgeIds.has(edge.id)) {
-    //       uniqueEdgeIds.add(edge.id);
-    //       return true;
-    //     }
-    //     return false;
-    //   });
-      // this.network.setData({ nodes, edges });
-      // window.network = { nodes, edges };
-      // this.network.on("selectNode", params => {
-      //   if (this.window.ContextPanel) {
-      //     const nodeId = params.nodes[0];
-      //     const node = this.network.body.data.nodes.get(nodeId);
-      //     window.ContextPanel.showNode(node);
-      //     this.pushEvent("select_node", {node_id: nodeId});
-      //   }
-      // });
-      
-      // this.network.on("selectEdge", params => {
-      //   if (this.window.ContextPanel) {
-      //     const edgeId = params.edges[0];
-      //     const edge = this.network.body.data.edges.get(edgeId);
-      //     window.ContextPanel.showEdge(edge);
-      //     this.pushEvent("select_edge", {edge_id: edgeId});
-      //   }
-      // });
-      
-      // Update videos after updating network
-  // },
+
   initNetwork(el, data) {
     const nodes = new DataSet(data.nodes)
     const edges = new DataSet(data.edges);
     const container = el;
     const diagram = { nodes, edges };
     const options = {
+      edges: {
+        font: {
+          size: 12
+        },
+        color: 'gray',
+        arrows: 'to',
+        smooth: true,
+        hoverWidth: 1.5
+      },
       layout: {
         improvedLayout: false,
       }
