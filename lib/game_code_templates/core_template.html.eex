@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script>
+<%= script_template %>
+</script>
+    <title><%= game_title %></title>
+</head>
+<body>
+    <div id="content">
+        Loading...
+    </div>
+    <video id="videoA" controls></video>
+    <video id="videoB" controls style="display: none;"></video>
+</body>
+</html>

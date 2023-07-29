@@ -1,0 +1,80 @@
+        window.onload = function() {
+            fetch('http://127.0.0.1:8080/assets/expanding.playgraph')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error("HTTP error " + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Save the playgraph data
+                    window.playgraph = data;
+                    
+
+                    // Initialize VideoPlayer
+                    window.VideoPlayer = new VideoPlayer();
+                    window.VideoPlayer.setupEventHandlers();
+
+                    // Start with the last node in the graph
+                    window.VideoPlayer.currentNodeIndex = data.nodes.length - 1; // Start at the last node
+
+                    const firstNode =  data.nodes[data.nodes.length - 1];
+                    const firstVideo = `/assets/${firstNode.edges[0].id}`; // Assuming the node has at least one edge
+                    const videoA = document.getElementById('videoA');
+                    videoA.src = firstVideo;
+                    // this won't play until the user interacts with the page, fix it:
+                    // videoA.play();
+                    const interval = setInterval(() => {
+                        if (videoA.readyState > 3) {
+                            videoA.play();
+                            clearInterval(interval);
+                        }
+                    }, 100);
+
+                })
+                .catch(function() {
+                    console.log("Failed to load JSON file");
+                });
+        };
+
+        class VideoPlayer {
+            constructor() {
+                this.videoA = document.getElementById('videoA');
+                this.videoB = document.getElementById('videoB');
+                this.blocked = false; // Initially, the player is not blocked
+            }
+
+            setupEventHandlers() {
+                this.videoA.onended = () => this.switchVideos(this.videoA, this.videoB);
+                this.videoB.onended = () => this.switchVideos(this.videoB, this.videoA); 
+            }
+
+            switchVideos(currentVideo, nextVideo) {
+                if (this.blocked) return;
+
+                // Determine the next node to transition to
+                const currentNode = window.playgraph.nodes[this.currentNodeIndex];
+                const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
+                const nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
+                const nextVideoPath = `/assets/${currentNode.edges[nextEdgeIndex].id}`;
+
+                // Update the current node index if we transitioned to a different node
+                const nextNodeId = currentNode.edges[nextEdgeIndex].to;
+                const nextNodeIndex = window.playgraph.nodes.findIndex(node => node.id === nextNodeId);
+                if (nextNodeIndex !== -1) {
+                    this.currentNodeIndex = nextNodeIndex;
+                }
+
+                // Play the next video
+                nextVideo.src = nextVideoPath;
+                nextVideo.oncanplaythrough = () => {
+                    // Hide current video and play next video when it's ready to play
+                    currentVideo.style.display = "none";
+                    nextVideo.style.display = "block";
+                    nextVideo.play();
+
+                    // Remove the oncanplaythrough event handler
+                    nextVideo.oncanplaythrough = null;
+                };
+            }
+        }
