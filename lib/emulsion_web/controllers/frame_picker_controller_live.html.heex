@@ -8,15 +8,6 @@
   <% else %>
 
   <div :if={@mode != :select_initial_video} >
-    <div id="video-player" class="border-2" phx-hook="VideoPlayer">
-      <video id="videoA" controls src={@current_video}>
-      </video>
-      <video id="videoB" controls>
-      </video>
-      <div id="buttons-container" class="">
-        
-      </div>
-    </div>
     <div>
       <h1 class="text-3xl font-bold opacity-100">
         Mode: <%= @mode %>
@@ -82,12 +73,13 @@
       </div>
 
     </div>
+    <div
+    id="mynetwork" phx-hook="VisNetwork" phx-update="ignore" 
+    class="col-span-2 w-full h-96  border-sky-100"
+    data_diagram_data={@diagram}>
+  </div>
+
     <div class="grid grid-cols-3 gap-4">
-      <div
-        id="mynetwork" phx-hook="VisNetwork" phx-update="ignore" 
-        class="col-span-2 w-full h-full border-sky-100"
-        data_diagram_data={@diagram}>
-      </div>
       <div id="contextPanelEdge" phx-hook="ContextPanel" phx-update="ignore" 
           class="col-span-1 w-full h-full border-sky-100" 
           selected-edge-id={ @selected_edge_id }>
@@ -98,7 +90,14 @@
       </div>
     </div>
     
-    
+    <div id="video-player" class="border-2" phx-hook="VideoPlayer">
+      <video id="videoA" controls src={@current_video}>
+      </video>
+      <video id="videoB" controls>
+      </video>
+      <div id="buttons-container" class="">
+      </div>
+    </div>
     <div class="flex h-screen">
       <div id="left-column" class="w-1/4 overflow-auto">
         <div class="flex flex-col h-full">

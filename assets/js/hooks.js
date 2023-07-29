@@ -8,7 +8,6 @@ Hooks.VisNetwork = {
     let data = JSON.parse(this.el.attributes['data_diagram_data'].value)
     this.network = this.initNetwork(this.el, data);
 
-
     // Add a buffer to store updates
     this.buffer = { nodes: [], edges: [] };
     // Start a  timer so that large graphs don't overload everything
@@ -34,7 +33,7 @@ Hooks.VisNetwork = {
           }
           return false;
         });
-      this.network.setData({ nodes, edges });
+        this.network.setData({ nodes, edges });
         window.network = { nodes, edges };
 
         this.network.on("selectNode", params => {
@@ -42,16 +41,16 @@ Hooks.VisNetwork = {
             const nodeId = params.nodes[0];
             const node = this.network.body.data.nodes.get(nodeId);
             window.ContextPanel.showNode(node);
-            this.pushEvent("select_node", {node_id: nodeId});
+            this.pushEvent("select_node", { node_id: nodeId });
           }
         });
-        
+
         // when they hover, show the id of the edge
         this.network.on('hoverEdge', params => {
           const edgeId = params.edge;
           const edge = this.network.body.data.edges.get(edgeId);
           const label = edge.tags ? edge.tags.join(',') : edge.id;
-          this.network.body.data.edges.update({id: edgeId, label: label});
+          this.network.body.data.edges.update({ id: edgeId, label: label });
         });
 
         this.network.on("selectEdge", params => {
@@ -59,9 +58,10 @@ Hooks.VisNetwork = {
             const edgeId = params.edges[0];
             const edge = this.network.body.data.edges.get(edgeId);
             window.ContextPanel.showEdge(edge);
+            window.VideoPlayer.queueVideo(edge.path);
+            this.pushEvent("select_edge", { edge_id: edgeId });
             // Set nextSelectedEdge on window object
-            window.nextSelectedEdge = edgeId;
-            this.pushEvent("select_edge", {edge_id: edgeId});
+            // window.nextSelectedEdge = edgeId;
           }
         });
         if (window.VideoPlayer) {
@@ -137,6 +137,8 @@ Hooks.VideoPlayer = {
     if (this.videoA.paused && this.videoB.paused) {
       this.videoA.src = this.queuedVideo;
       this.queuedVideo = null; // Clear queued video after setting it
+      this.videoB.style.display = "none";
+      this.videoA.style.display = "block";
       this.videoA.play();
     }
   },
@@ -184,7 +186,7 @@ Hooks.VideoPlayer = {
     this.blocked = false;
     this.setupEventHandlers();
   },
-  
+
   createButton(edge) {
     const button = document.createElement('button');
     button.textContent = edge.tags ? edge.tags.join(',') : '(' + edge.id + ")";
@@ -199,24 +201,24 @@ Hooks.VideoPlayer = {
     if (!edge) {
       return null;
     }
-  
+
     const curNodeId = edge.to;
     const outgoingEdges = window.network.edges.filter(edge => edge.from === curNodeId);
-  
+
     // Remove any previously generated buttons
     const container = document.getElementById('buttons-container');
     while (container.firstChild) {
       container.firstChild.remove();
     }
-  
+
     // Create a button for each outgoing edge
     outgoingEdges.forEach(edge => {
       const button = this.createButton(edge);
       container.appendChild(button);
     });
-  
+
     let nextEdge = null;
-  
+
     // If 'nextSelectedEdge' is defined, find the corresponding edge by id or tag
     if (window.nextSelectedEdge) {
       // nextEdge = outgoingEdges.find(edge => edge.id === window.nextSelectedEdge);
@@ -225,33 +227,28 @@ Hooks.VideoPlayer = {
         nextEdge = outgoingEdges.find(edge => edge.tags && edge.tags.includes(window.nextSelectedEdge));
       }
     }
-  
+
     // If no edge was selected or 'nextSelectedEdge' didn't match any edge, find an 'idle' edge
     if (!nextEdge) {
       nextEdge = outgoingEdges.find(edge => edge.tags && edge.tags.includes('idle'));
     }
-  
+
     // If no idle edge found, just pick the first one
     if (!nextEdge) {
       nextEdge = outgoingEdges[0];
     }
-  
+
     // Reset 'nextSelectedEdge'
     window.nextSelectedEdge = null;
-  
+
     return nextEdge;
   },
-  
-  updated() {
-    const nextVideoA = this.el.dataset.nextVideoA;
-    const nextVideoB = this.el.dataset.nextVideoB;
-    if (nextVideoA) {
-      this.videoA.src = nextVideoA;
-    }
-    if (nextVideoB) {
-      this.videoB.src = nextVideoB;
-    }
-  }
+
+  // callback handler for when user clicks an edge in the VisGraph 
+  // todo: needs to be debugged
+  playEdge(edge) {
+    this.queueVideo(edge.path);
+  },
 };
 
 // next up: 
@@ -260,7 +257,6 @@ Hooks.VideoPlayer = {
 // clicking the node goes to that frame
 
 Hooks.ContextPanel = {
-
   mounted() {
     window.ContextPanel = this;
     this.window = window;
@@ -279,7 +275,7 @@ Hooks.ContextPanel = {
       this.showNode(node);
     } else if (edgeId) {
       const edge = window.network.edges.find({ id: nodeId });
-      
+
       this.showEdge(edge);
     }
   },
@@ -302,10 +298,10 @@ Hooks.ContextPanel = {
     `;
     let tagButton = document.querySelector('button[data-action="tag"]');
     let self = this;
-    tagButton.addEventListener('click', function() {
+    tagButton.addEventListener('click', function () {
       let tagInput = document.querySelector('#tag-input');
       let tag = tagInput.value;
-      self.pushEvent("tag_edge", {edge_id: edge.id, tag: tag});
+      self.pushEvent("tag_edge", { edge_id: edge.id, tag: tag });
     });
     let gotoButton = document.querySelector('button[data-action="goto"]');
     gotoButton.addEventListener('click', () => {
@@ -341,14 +337,14 @@ Hooks.ContextPanel = {
     let idleButton = document.querySelector('button[data-action="idle"]');
     let frameRange = document.querySelector('#frame-range');
     let frameValueSpan = document.querySelector('#frame-value');
-  
-    frameRange.addEventListener('input', function() {
+
+    frameRange.addEventListener('input', function () {
       frameValueSpan.textContent = this.value;
     });
-  
+
     idleButton.addEventListener('click', () => {
       let frameValue = frameRange.value;
-      this.pushEvent("idle_around_frame", {src_frame: node.id, range: frameValue});
+      this.pushEvent("idle_around_frame", { src_frame: node.id, range: frameValue });
     });
   }
 };
@@ -359,18 +355,18 @@ Hooks.ScrollToThumb = {
       console.log(event.target.value);
       let searchStr = event.target.value;
       if (searchStr) {
-          let thumbEls = document.querySelectorAll("#thumbGrid img");
-          let rightColumn = document.querySelector("#right-column");
-          for (let i = 0; i < thumbEls.length; i++) {
-              let thumbEl = thumbEls[i];
-              if (thumbEl.src.includes(searchStr)) {
-                  rightColumn.scrollTop = thumbEl.offsetParent.offsetTop - rightColumn.offsetTop;
-                  break;
-              }
+        let thumbEls = document.querySelectorAll("#thumbGrid img");
+        let rightColumn = document.querySelector("#right-column");
+        for (let i = 0; i < thumbEls.length; i++) {
+          let thumbEl = thumbEls[i];
+          if (thumbEl.src.includes(searchStr)) {
+            rightColumn.scrollTop = thumbEl.offsetParent.offsetTop - rightColumn.offsetTop;
+            break;
           }
+        }
       }
-  });
-}
+    });
+  }
 
 }
 
