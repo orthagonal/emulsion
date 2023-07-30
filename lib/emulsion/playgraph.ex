@@ -53,11 +53,20 @@ defmodule Emulsion.Playgraph do
     GenServer.call(__MODULE__, {:delete_edge, edge_id})
   end
 
+def get_playgraph() do
+    GenServer.call(__MODULE__, {:get_playgraph})
+  end
+
+  def handle_call({:get_playgraph}, _from, state) do
+    {:reply, state, state}
+  end
+
   def handle_call(:reset, _from, _state) do
     {:reply, :ok, %{"nodes" => []}}
   end
 
   @doc """
+  THIS IS A DUPLICATE  I moed this to exporter
   Export the playgraph and all of its assets to a folder
   """
   def handle_call({:export_playgraph, folder_path}, _from, state) do
@@ -103,7 +112,11 @@ defmodule Emulsion.Playgraph do
             Emulsion.Files,
             {:convert_browser_path_to_disk_path, edge["original_path"]}
           )
-
+          |> convert_if_needed()
+        IO.puts ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+        IO.puts ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+        IO.puts ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+        IO.puts ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
         IO.puts("copying #{disk_path} to #{Path.join(assets_path, Path.basename(disk_path))}")
         res = File.cp(disk_path, Path.join(assets_path, Path.basename(disk_path)))
         IO.inspect(res)

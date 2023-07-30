@@ -1,41 +1,33 @@
-        window.onload = function() {
-            fetch('http://127.0.0.1:8080/assets/expanding.playgraph')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error("HTTP error " + response.status);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    // Save the playgraph data
-                    window.playgraph = data;
-                    
+window.onload = function () {
+    // Fetch playgraph from local file using Tauri
+    tauri.promisified({
+        cmd: "getPlaygraph", // Assuming a corresponding Rust command is defined
+    })
+        .then((data) => {
+            window.playgraph = data;
 
-                    // Initialize VideoPlayer
-                    window.VideoPlayer = new VideoPlayer();
-                    window.VideoPlayer.setupEventHandlers();
+            window.VideoPlayer = new VideoPlayer();
+            window.VideoPlayer.setupEventHandlers();
 
-                    // Start with the last node in the graph
-                    window.VideoPlayer.currentNodeIndex = data.nodes.length - 1; // Start at the last node
+            window.VideoPlayer.currentNodeIndex = data.nodes.length - 1;
 
-                    const firstNode =  data.nodes[data.nodes.length - 1];
-                    const firstVideo = `/assets/${firstNode.edges[0].id}`; // Assuming the node has at least one edge
-                    const videoA = document.getElementById('videoA');
-                    videoA.src = firstVideo;
-                    // this won't play until the user interacts with the page, fix it:
-                    // videoA.play();
-                    const interval = setInterval(() => {
-                        if (videoA.readyState > 3) {
-                            videoA.play();
-                            clearInterval(interval);
-                        }
-                    }, 100);
+            const firstNode = data.nodes[data.nodes.length - 1];
+            const firstVideo = `./main/${firstNode.edges[0].id}`; // Assuming the main sub-folder contains the video files
 
-                })
-                .catch(function() {
-                    console.log("Failed to load JSON file");
-                });
-        };
+            const videoA = document.getElementById("videoA");
+            videoA.src = firstVideo;
+
+            const interval = setInterval(() => {
+                if (videoA.readyState > 3) {
+                    videoA.play();
+                    clearInterval(interval);
+                }
+            }, 100);
+        })
+        .catch(function () {
+            console.log("Failed to load JSON file");
+        });
+};
 
         class VideoPlayer {
             constructor() {
@@ -56,7 +48,7 @@
                 const currentNode = window.playgraph.nodes[this.currentNodeIndex];
                 const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
                 const nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
-                const nextVideoPath = `/assets/${currentNode.edges[nextEdgeIndex].id}`;
+                const nextVideoPath = `./main/${currentNode.edges[nextEdgeIndex].id}`;
 
                 // Update the current node index if we transitioned to a different node
                 const nextNodeId = currentNode.edges[nextEdgeIndex].to;

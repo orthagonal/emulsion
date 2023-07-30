@@ -13,6 +13,7 @@ defmodule Emulsion.Application do
       { Emulsion.Playgraph, name: :playgraph },
       { Emulsion.Files, name: :fileServer },
       { Emulsion.Video, name: :videoServer },
+      { Emulsion.Exporter, name: :exporter },
       { Emulsion.NotifyWhenDone, name: :notifyWhenDone},
       { Emulsion.NotifyWhenCreated, name: :notifyWhenCreated},
       # Start the Ecto repository

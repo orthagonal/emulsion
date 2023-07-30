@@ -18,6 +18,8 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     {
       :ok,
       assign(socket,
+        assets_path: "",
+        title: "",
         working_root: "e:/emulsion_workspace",
         mode: :select_initial_video,
         files: files,
@@ -346,4 +348,18 @@ defmodule EmulsionWeb.FramePickerControllerLive do
         {:noreply, socket}
     end
   end
+
+  def handle_event("export_all", %{"assets_path" => assets_path, "title" => title}, socket) do
+    # Get the playgraph from the playgraph server
+    playgraph = Emulsion.Playgraph.get_playgraph()
+
+    # Define templates
+    templates = %{html_template: "core_template.html", js_template: "core_script.js"}
+
+    # Call Exporter.export_all
+    Emulsion.Exporter.export_all( title,  playgraph, templates, assets_path)
+
+    {:noreply, assign(socket, assets_path: assets_path, title: title)}
+  end
+
 end

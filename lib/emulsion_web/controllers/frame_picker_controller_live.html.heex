@@ -137,5 +137,15 @@
   <div class="custom-menu hidden bg-white rounded shadow-lg z-50">
     <!-- Menu items will be inserted dynamically here -->
   </div>
+
+  <form phx-submit="export_all" class="bg-blue rounded shadow-lg ">
+    <label for="assets_path">Assets Path:</label>
+    <input type="text" name="assets_path" id="assets_path" phx-value-assets_path={@assets_path} />
+  
+    <label for="title">Title:</label>
+    <input type="text" name="title" id="title" phx-value-title={@title} />
+  
+    <button type="submit">Export All</button>
+  </form>
   
 </div>

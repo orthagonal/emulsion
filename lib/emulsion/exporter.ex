@@ -39,11 +39,19 @@ defmodule Emulsion.Exporter do
     File.write!("#{state.directory}/playgraph.playgraph", Jason.encode!(normalized_playgraph))
     Enum.each(normalized_playgraph["nodes"], fn node ->
       Enum.each(node["edges"], fn edge ->
-        File.cp!(edge["path"], "#{state.directory}/main/#{Path.basename(edge["path"])}")
+        File.cp!(convert_if_needed(edge["path"]), "#{state.directory}/main/#{Path.basename(edge["path"])}")
       end)
     end)
 
     {:reply, :ok, state}
+  end
+
+  defp convert_if_needed(path) do
+    if String.starts_with?(path, "/file") do
+      Emulsion.Files.convert_browser_path_to_disk_path(path)
+    else
+      path
+    end
   end
 
   defp normalize_playgraph_paths(playgraph, new_directory) do
