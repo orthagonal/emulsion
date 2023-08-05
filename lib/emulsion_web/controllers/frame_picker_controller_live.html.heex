@@ -174,14 +174,14 @@
     <!-- Menu items will be inserted dynamically here -->
   </div>
 
-  <form phx-submit="export_all" class="bg-blue rounded shadow-lg ">
-    <label for="assets_path">Assets Path:</label>
-    <input type="text" name="assets_path" id="assets_path" value={@assets_path} />
-    
-    <label for="title">Title:</label>
-    <input type="text" name="title" id="title" value={@title} />
-    
-    <button type="submit">Export All</button>
-  </form>
-  
+    <div class="w-1/4 bg-gray-100 h-screen overflow-auto sticky top-0">
+      <h2 class="text-2xl p-4 border-b border-gray-200">Export Module</h2>
+      <form phx-submit="export_all" class="bg-blue rounded shadow-lg ">
+        <label for="assets_path">Assets Path:</label>
+        <input type="text" name="assets_path" id="assets_path" value={@assets_path} />
+        <label for="title">Title:</label>
+        <input type="text" name="title" id="title" value={@title} />
+        <button type="submit">Export All</button>
+    </form>
+  </div>
 </div>
