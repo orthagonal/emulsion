@@ -1,0 +1,12 @@
+window.Playgraph = {
+  playgraphs: {
+    <%= playgraph_name %>:  <%=playgraph %>,
+  },
+  getPlaygraph(name) {
+    if (window.Playgraph.playgraphs[name]) {
+      return window.Playgraph.playgraphs[name];
+    }
+  }
+};
+
+// next up is controls and exporting graph from emulsion like this

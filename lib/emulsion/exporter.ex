@@ -19,8 +19,8 @@ defmodule Emulsion.Exporter do
     GenServer.call(__MODULE__, {:set_directory, directory})
   end
 
-  def export_playgraph(playgraph) do
-    GenServer.call(__MODULE__, {:export_playgraph, playgraph})
+  def export_playgraph(playgraph, templates) do
+    GenServer.call(__MODULE__, {:export_playgraph, playgraph, templates})
   end
 
   def handle_call(:get_directory, _from, state) do
@@ -31,19 +31,29 @@ defmodule Emulsion.Exporter do
     {:reply, :ok, Map.put(state, :directory, directory)}
   end
 
-  def handle_call({:export_playgraph, playgraph}, _from, state) do
+  def handle_call({:export_playgraph, playgraph, templates}, _from, state) do
     File.mkdir_p!("#{state.directory}/main")
 
     normalized_playgraph = normalize_playgraph_paths(playgraph, "#{state.directory}/main")
 
-    File.write!("#{state.directory}/playgraph.playgraph", Jason.encode!(normalized_playgraph))
+    string_playgraph = Jason.encode!(normalized_playgraph)
+
+    # additional templates (optional)
+    if (Map.has_key?(templates, :playgraph_template)) do
+      playgraph_template = templates.playgraph_template
+      playgraph_content = do_export_template(playgraph_template, %{playgraph: string_playgraph, playgraph_name: "main"})
+      playgraph_path = Path.join([state.directory, "playgraph.js"])
+      File.write!(playgraph_path, playgraph_content)
+    end
+
+    File.write!("#{state.directory}/playgraph.playgraph", string_playgraph)
     Enum.each(normalized_playgraph["nodes"], fn node ->
       Enum.each(node["edges"], fn edge ->
         File.cp!(convert_if_needed(edge["path"]), "#{state.directory}/main/#{Path.basename(edge["path"])}")
       end)
     end)
 
-    {:reply, :ok, state}
+    {:reply, normalized_playgraph, state}
   end
 
   defp convert_if_needed(path) do
@@ -69,6 +79,7 @@ defmodule Emulsion.Exporter do
   def export_template(template_name, context) do
     GenServer.call(__MODULE__, {:export_template, template_name, context})
   end
+
   defp do_export_template(template_name, context) do
     template_path = Path.join(["lib/game_code_templates", "#{template_name}.eex"])
     template = File.read!(template_path)
@@ -82,24 +93,27 @@ defmodule Emulsion.Exporter do
   end
 
   def export_player(title, playgraph, templates) do
-    html_template = templates.html_template
-    js_template = templates.js_template
-    GenServer.call(__MODULE__, {:export_player, title, playgraph, html_template, js_template})
+    GenServer.call(__MODULE__, {:export_player, title, playgraph, templates})
   end
 
-  def handle_call({:export_player, title, playgraph, html_template, js_template}, _from, state) do
+  def handle_call({:export_player, title, playgraph, templates}, _from, state) do
+    # mandatory templates
+    html_template = templates.html_template
+    js_template = templates.js_template
     # Render JS template
     js_content = do_export_template(js_template, %{playgraph: playgraph})
-
     # Render HTML template
     html_path_template = Path.join(["./lib/game_code_templates", "#{html_template}.eex"])
     bindings = Enum.map(%{script_template: js_content, game_title: title}, fn {k, v} -> {k, v} end) # Convert context map to keyword list
     html_content = EEx.eval_file(html_path_template, bindings)
 
-    # Write HTML content to a file
+     # Write HTML content to a file
     html_path = Path.join([state.directory, "player.html"])
     File.mkdir_p!(Path.dirname(html_path))
     File.write!(html_path, html_content)
+    # write src.js to file
+    js_path = Path.join([state.directory, "src.js"])
+    File.write!(js_path, js_content)
 
     {:reply, :ok, state}
   end
@@ -110,7 +124,7 @@ defmodule Emulsion.Exporter do
     set_directory(assets_path)
 
     # Export the playgraph
-    export_playgraph(playgraph)
+    export_playgraph(playgraph, templates)
 
     # Export the player
     export_player(title, playgraph, templates)

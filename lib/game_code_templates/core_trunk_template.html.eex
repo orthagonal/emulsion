@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script data-trunk src="./player.js">   </script>
+    <script data-trunk src="./playgraph.js">   </script>
+    <link data-trunk rel="copy-dir" href="../src/expanding/main" > </link>
+    <title> <%= game_title %> </title>
+  </head>
+  <body>
+    <div id="userInputDisplay">Loading...</div>
+    <video id="videoA" controls></video>
+    <video id="videoB" controls style="display: none"></video>
+  </body>
+</html>

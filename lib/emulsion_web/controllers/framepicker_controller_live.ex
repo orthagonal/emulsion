@@ -29,7 +29,9 @@ defmodule EmulsionWeb.FramePickerControllerLive do
         saved_playgraphs: [],
         selected_playgraph: "",
         selected_node_id: "",
-        selected_edge_id: ""
+        selected_edge_id: "",
+        tween_multiplier: 5,
+        force_build: false
       )
     }
   end
@@ -154,41 +156,56 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     {:noreply, socket}
   end
 
+  def handle_event("update_force_build",  params, socket) do
+    force_build = Map.get(params, "force_build", false)
+    {:noreply, assign(socket, force_build: force_build)}
+  end
+
+  def handle_event("update_tween_multiplier",  params, socket) do
+    tween_multiplier = Map.get(params, "tween_multiplier", 5)
+    tween_multiplier_number = tween_multiplier
+    {:noreply, assign(socket, tween_multiplier: tween_multiplier_number)}
+  end
+
   @doc """
   Generate a tween video from the selected source and destination frames
   """
   def handle_event("generate_tween", event, socket) do
     srcFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, socket.assigns.srcFrame})
     destFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, socket.assigns.destFrame})
-    tweenLength = Map.get(socket.assigns, :tweenLength, "5")
+    tween_multiplier_number = Map.get(socket.assigns, :tween_multiplier, 5)
+    tween_multiplier = if is_integer(tween_multiplier_number) do
+      Integer.to_string(tween_multiplier_number)
+    else
+      tween_multiplier_number
+    end
+    force_build = Map.get(socket.assigns, :force_build, false)
     # make a call for this that wraps the GenServer cast and does the Task.start_link stuff
     # so that it can call back when the tween is done
     pid = self()
     # call a Task.start_link that calls the GenServer.cast
-    # Task.start_link(fn ->
-    #   video_name = GenServer.call(Emulsion.Video, {:generate_tween_and_video, srcFrame, destFrame, tweenLength}, 999_999)
-    #   basename = Path.basename(video_name)
-    #   # convert the video name to one suitable fofr use in the browser with the '/file/' prefix
-    #   video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
-    #   send(pid, {:tween_generated, video_name})
-    # end)
     Task.start_link(fn ->
       video_name =
         GenServer.call(
           Emulsion.Video,
-          {:generate_tween_and_video, srcFrame, destFrame, tweenLength},
+          {:generate_tween_and_video, srcFrame, destFrame, tween_multiplier, force_build},
           999_999
-        )
-
+      )
+      IO.puts "the call is done"
+      IO.puts("video name is #{video_name}")
       basename = Path.basename(video_name)
       # convert the video name to one suitable for use in the browser with the '/file/' prefix
+      IO.puts "calling emulasion files"
       video_name =
         GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
-
+      IO.puts "done calling emulasion files"
       # add nodes and edge to the graph
       Emulsion.Playgraph.add_node(srcFrame)
+      IO.puts "added srcFrame to graph"
       Emulsion.Playgraph.add_node(destFrame)
+      IO.puts "added destFrame to graph"
       Emulsion.Playgraph.add_edge(srcFrame, destFrame, basename, video_name)
+      IO.puts "added edge to graph"
       send(pid, {:tween_generated, video_name})
     end)
 
@@ -208,14 +225,18 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   end
 
   def handle_info({:tween_generated, video_name}, socket) do
+    IO.puts "tween was generated"
     nodes = GenServer.call(Emulsion.Playgraph, {:get_nodes})
     edges = GenServer.call(Emulsion.Playgraph, {:get_edges})
-
+    IO.puts "got nodes and edges"
+    IO.inspect video_name
+    IO.inspect nodes
+    IO.inspect edges
     newsocket =
       socket
       |> assign(current_video: video_name)
       |> push_event("update_graph", %{nodes: nodes, edges: edges})
-
+    IO.puts "pushed event"
     {:noreply, newsocket}
   end
 
@@ -279,8 +300,9 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   end
 
   defp handle_tween_result(video_name, srcFrame, destFrame, pid) do
+    IO.puts "handling tween result"
     video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
-
+    IO.inspect video_name
     # Add nodes and edge to the graph
     Emulsion.Playgraph.add_node(srcFrame)
     Emulsion.Playgraph.add_node(destFrame)
@@ -332,29 +354,36 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   end
 
   def handle_event(
-        "idleify_frame",
-        %{
-          "current_frame" => current_frame,
-          "idle_range" => idle_range,
-          "connect_frame" => connect_frame
-        },
-        socket
-      ) do
-    case Emulsion.Idioms.idleify_frame(current_frame, idle_range, connect_frame, self()) do
-      {:ok, _} ->
-        {:noreply, socket}
+      "idleify_frame",
+      %{
+        "current_frame" => current_frame,
+        "idle_range" => idle_range,
+        "connect_frame" => connect_frame
+      },
+      socket
+    ) do
+  force_build = socket.assigns.force_build
+  tween_multiplier = socket.assigns.tween_multiplier
+  case Emulsion.Idioms.idleify_frame(current_frame, idle_range, connect_frame, tween_multiplier, force_build, self()) do
+    {:ok, _} ->
+      {:noreply, socket}
 
-      {:error, _} ->
-        {:noreply, socket}
-    end
+    {:error, _} ->
+      {:noreply, socket}
   end
+end
 
   def handle_event("export_all", %{"assets_path" => assets_path, "title" => title}, socket) do
     # Get the playgraph from the playgraph server
     playgraph = Emulsion.Playgraph.get_playgraph()
 
     # Define templates
-    templates = %{html_template: "core_template.html", js_template: "core_script.js"}
+    # TODO: make a selector to choose whichtemplates to export
+    templates = %{
+      html_template: "core_trunk_template.html",
+      js_template: "core_script.js",
+      playgraph_template: "core_playgraph.js"
+    }
 
     # Call Exporter.export_all
     Emulsion.Exporter.export_all( title,  playgraph, templates, assets_path)

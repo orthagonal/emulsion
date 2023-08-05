@@ -140,7 +140,7 @@ for i in range(len(img_list)):
 
 print("Done now converting to video")
 folderOut = args.folderOut
-
+print(folderOut)
 # Create video using ffmpeg
 result = subprocess.run([
     "c:/GitHub/emulsion/lib/scripts/ffmpeg.exe", "-start_number", "1", "-i", os.path.join(folderOut, "img%d.png"), "-c:v", "vp9",

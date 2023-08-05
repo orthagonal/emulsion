@@ -14,35 +14,47 @@ defmodule Emulsion.Idioms do
   idle tweens are videos that go from a source frame to a dest frame and then back to the source frame
     this allows the player to 'idle' around a frame infinitely until the user chooses to move on.
   """
-  def generate_idle_tween(src_frame, range, direction) when is_binary(range) do
+  def generate_idle_tween(src_frame, range, direction, tween_multiplier, force_build)
+      when is_binary(range) do
     range = String.to_integer(range)
-    generate_idle_tween(src_frame, range, direction)
+    generate_idle_tween(src_frame, range, direction, tween_multiplier, force_build)
   end
 
-  def generate_idle_tween(src_frame, range, direction) do
+  def generate_idle_tween(src_frame, range, direction, tween_multiplier, force_build) do
     dest_frame = Files.get_frame(src_frame, direction, range)
     pid = self()
 
-    # handle_forward_tween should only handle from src to dest
-    handle_forward_tween(pid, src_frame, dest_frame)
-
-    # handle_backward_tween should only handle from dest to src
-    handle_backward_tween(pid, dest_frame, src_frame)
+    handle_forward_tween(pid, src_frame, dest_frame, tween_multiplier, force_build)
+    handle_backward_tween(pid, dest_frame, src_frame, tween_multiplier, force_build)
   end
 
-  defp handle_forward_tween(pid, src_frame, dest_frame) do
+  defp handle_forward_tween(pid, src_frame, dest_frame, tween_multiplier, force_build) do
     Task.start_link(fn ->
-      generate_tweens(pid, src_frame, dest_frame, ["idle", "from_src"])
+      generate_tweens(
+        pid,
+        src_frame,
+        dest_frame,
+        ["idle", "from_src"],
+        force_build,
+        tween_multiplier
+      )
     end)
   end
 
-  defp handle_backward_tween(pid, src_frame, dest_frame) do
+  defp handle_backward_tween(pid, src_frame, dest_frame, tween_multiplier, force_build) do
     Task.start_link(fn ->
-      generate_tweens(pid, src_frame, dest_frame, ["idle", "to_src"])
+      generate_tweens(
+        pid,
+        src_frame,
+        dest_frame,
+        ["idle", "to_src"],
+        force_build,
+        tween_multiplier
+      )
     end)
   end
 
-  defp generate_tweens(pid, from_frame, to_frame, tag) do
+  defp generate_tweens(pid, from_frame, to_frame, tag, tween_multiplier, force_build) do
     # add the two nodes to the playgraph first so that both edges can be added once they are generated
     Playgraph.add_node(from_frame)
     Playgraph.add_node(to_frame)
@@ -50,7 +62,7 @@ defmodule Emulsion.Idioms do
     video_name =
       GenServer.call(
         Emulsion.Video,
-        {:generate_tween_and_video, from_frame, to_frame, "5"},
+        {:generate_tween_and_video, from_frame, to_frame, tween_multiplier, force_build},
         999_999
       )
 
@@ -73,9 +85,16 @@ defmodule Emulsion.Idioms do
     {from_frame_path, to_frame_path, srcFrameNumber, destFrameNumber}
   end
 
-  def generate_idle_tween(current_frame, idle_range) do
+  def generate_idle_tween(current_frame, idle_range, tween_multiplier, force_build) do
     from_frame_path = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, current_frame})
-    Emulsion.Idioms.generate_idle_tween(from_frame_path, idle_range, :forward)
+
+    Emulsion.Idioms.generate_idle_tween(
+      from_frame_path,
+      idle_range,
+      :forward,
+      force_build,
+      tween_multiplier
+    )
   end
 
   def prepare_for_task(srcFrameNumber, destFrameNumber, current_frame, connect_frame) do
@@ -94,19 +113,20 @@ defmodule Emulsion.Idioms do
   @doc """
   `idleify_frame/4` generates tweens to/from nearby or similar frames. This allows the player to 'idle' around a frame infinitely until the user chooses to move on.
   """
-  def idleify_frame(current_frame, idle_range, connect_frame, pid) do
+
+  def idleify_frame(current_frame, idle_range, connect_frame, tween_multiplier, force_build, pid) do
     # Prepare the frames
     {from_frame_path, to_frame_path, srcFrameNumber, destFrameNumber} =
       prepare_frames(current_frame, connect_frame)
 
     # Generate the idle tween for the current frame
-    generate_idle_tween(current_frame, idle_range)
+    generate_idle_tween(current_frame, idle_range, tween_multiplier, force_build)
 
     # Prepare the parameters for the task
     {srcFolderPath, start_frame, number_of_frames, outputVideoName} =
       prepare_for_task(srcFrameNumber, destFrameNumber, current_frame, connect_frame)
 
-    #  add the connect frame to the graph first
+    # add the connect frame to the graph first
     Playgraph.add_node(to_frame_path)
 
     # if the destination frame is higher then we just cut out that section of frames instead of generating a tween
@@ -121,7 +141,13 @@ defmodule Emulsion.Idioms do
         )
       else
         # only generate one video
-        Emulsion.Video.generate_tween_and_video(from_frame_path, to_frame_path, "5")
+        Emulsion.Video.generate_tween_and_video(
+          from_frame_path,
+          to_frame_path,
+          tween_multiplier,
+          force_build
+        )
+
         send(pid, {:tween_generated, outputVideoName})
       end
 
@@ -142,40 +168,3 @@ defmodule Emulsion.Idioms do
     {:ok, pid}
   end
 end
-
-# def handle_event(
-#   "divide_by",
-#   %{"division_value" => division_value, "start_at" => start_at, "end_at" => end_at},
-#   socket
-# ) do
-# thumbFiles = socket.assigns.thumbFiles
-# x = String.to_integer(division_value)
-# i = if(start_at != "", do: String.to_integer(start_at), else: 0)
-# j = if(end_at != "", do: String.to_integer(end_at), else: length(thumbFiles) - 1)
-# pid = self()
-
-# Task.start_link(fn ->
-# while_frames_divide(i, i + x, thumbFiles, x, pid, j)
-# end)
-
-# {:noreply, socket}
-# end
-
-# defp while_frames_divide(_i, _j, _thumbFiles, _x, _pid, _max_j) when _j > _max_j, do: :ok
-
-# defp while_frames_divide(i, j, thumbFiles, x, pid, max_j) do
-# srcFrame = Enum.at(thumbFiles, i)
-# destFrame = Enum.at(thumbFiles, j)
-
-# # Get the actual frame file names using :get_frame_from_thumb
-# srcFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, srcFrame})
-# destFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, destFrame})
-
-# Emulsion.Video.generate_tween_and_video(srcFrame, destFrame, "5")
-# |> handle_tween_result(srcFrame, destFrame, pid)
-
-# Emulsion.Video.generate_tween_and_video(destFrame, srcFrame, "5")
-# |> handle_tween_result(destFrame, srcFrame, pid)
-
-# while_frames_divide(i + x, j + x, thumbFiles, x, pid, max_j)
-# end

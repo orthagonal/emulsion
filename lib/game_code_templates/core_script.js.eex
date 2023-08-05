@@ -1,72 +1,107 @@
-window.onload = function () {
-    // Fetch playgraph from local file using Tauri
-    tauri.promisified({
-        cmd: "getPlaygraph", // Assuming a corresponding Rust command is defined
-    })
-        .then((data) => {
-            window.playgraph = data;
+// current user input state:
+window.userInput = 'idle';
 
-            window.VideoPlayer = new VideoPlayer();
-            window.VideoPlayer.setupEventHandlers();
+// Function to update the display of the current user input
+function updateUserInputDisplay() {
+    document.getElementById('userInputDisplay').innerText = `User Input: ${window.userInput}`;
+  }
 
-            window.VideoPlayer.currentNodeIndex = data.nodes.length - 1;
+window.onload = async function () {
+    const playgraph = window.Playgraph.getPlaygraph('main');
+    const data = playgraph;
+    window.playgraph = data;
 
-            const firstNode = data.nodes[data.nodes.length - 1];
-            const firstVideo = `./main/${firstNode.edges[0].id}`; // Assuming the main sub-folder contains the video files
+    window.VideoPlayer = new VideoPlayer();
+    window.VideoPlayer.setupEventHandlers();
 
-            const videoA = document.getElementById("videoA");
-            videoA.src = firstVideo;
+    window.VideoPlayer.currentNodeIndex = data.nodes.length - 1;
 
-            const interval = setInterval(() => {
-                if (videoA.readyState > 3) {
-                    videoA.play();
-                    clearInterval(interval);
-                }
-            }, 100);
-        })
-        .catch(function () {
-            console.log("Failed to load JSON file");
-        });
+    const firstNode = data.nodes[data.nodes.length - 1];
+    const firstVideo = `/main/${firstNode.edges[0].id}`; // Assuming the main sub-folder contains the video files
+
+    const videoA = document.getElementById("videoA");
+    videoA.src = firstVideo;
+    
+    const playOnInteraction = function () {
+        if (videoA.readyState > 3) {
+            videoA.play();
+            // Remove this listener since the video has started
+            document.removeEventListener('click', playOnInteraction);
+        }
+    };
+
+    // Add listeners for various user interactions
+    document.addEventListener('click', playOnInteraction);
+
+    document.addEventListener('keydown', (event) => {
+        window.userInput = 'next';
+        // Update the display when the page loads
+    });
+    updateUserInputDisplay();
 };
 
-        class VideoPlayer {
-            constructor() {
-                this.videoA = document.getElementById('videoA');
-                this.videoB = document.getElementById('videoB');
-                this.blocked = false; // Initially, the player is not blocked
-            }
 
-            setupEventHandlers() {
-                this.videoA.onended = () => this.switchVideos(this.videoA, this.videoB);
-                this.videoB.onended = () => this.switchVideos(this.videoB, this.videoA); 
-            }
+class VideoPlayer {
+    constructor() {
+        this.videoA = document.getElementById('videoA');
+        this.videoB = document.getElementById('videoB');
+        this.blocked = false; // Initially, the player is not blocked
+    }
 
-            switchVideos(currentVideo, nextVideo) {
-                if (this.blocked) return;
+    setupEventHandlers() {
+        this.videoA.onended = () => this.switchVideos(this.videoA, this.videoB);
+        this.videoB.onended = () => this.switchVideos(this.videoB, this.videoA);
+    }
 
-                // Determine the next node to transition to
-                const currentNode = window.playgraph.nodes[this.currentNodeIndex];
-                const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
-                const nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
-                const nextVideoPath = `./main/${currentNode.edges[nextEdgeIndex].id}`;
+    
+    switchVideos(currentVideo, nextVideo) {
+        if (this.blocked) return;
 
-                // Update the current node index if we transitioned to a different node
-                const nextNodeId = currentNode.edges[nextEdgeIndex].to;
-                const nextNodeIndex = window.playgraph.nodes.findIndex(node => node.id === nextNodeId);
-                if (nextNodeIndex !== -1) {
-                    this.currentNodeIndex = nextNodeIndex;
-                }
+        // Determine the next node to transition to
+        const currentNode = window.playgraph.nodes[this.currentNodeIndex];
+        const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
+        let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
 
-                // Play the next video
-                nextVideo.src = nextVideoPath;
-                nextVideo.oncanplaythrough = () => {
-                    // Hide current video and play next video when it's ready to play
-                    currentVideo.style.display = "none";
-                    nextVideo.style.display = "block";
-                    nextVideo.play();
-
-                    // Remove the oncanplaythrough event handler
-                    nextVideo.oncanplaythrough = null;
-                };
-            }
+        // Select the next edge based on the global userInput variable
+        const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(window.userInput));
+        if (nextEdges.length > 0) {
+            nextEdgeIndex = currentNode.edges.indexOf(nextEdges[0]);
         }
+
+        const nextVideoPath = `/main/${currentNode.edges[nextEdgeIndex].id}`;
+
+        // Update the current node index if we transitioned to a different node
+        const nextNodeId = currentNode.edges[nextEdgeIndex].to;
+        const nextNodeIndex = window.playgraph.nodes.findIndex(node => node.id === nextNodeId);
+        if (nextNodeIndex !== -1) {
+            this.currentNodeIndex = nextNodeIndex;
+        }
+
+        // Play the next video
+        nextVideo.src = nextVideoPath;
+
+        // Play the next video
+        nextVideo.oncanplaythrough = () => {
+            // Hide current video
+            currentVideo.style.display = "none";
+            
+            // Display next video and play it
+            nextVideo.style.display = "block";
+            nextVideo.play();
+
+            // If the previous video was in fullscreen, make sure the next video also enters fullscreen
+            if (document.fullscreenElement) {
+                nextVideo.requestFullscreen().catch(err => {
+                    console.error(`Error attempting to enable fullscreen mode: ${err.message} (${err.name})`);
+                });
+            }
+
+            // Remove the oncanplaythrough event handler
+            nextVideo.oncanplaythrough = null;
+        };
+
+        // Reset userInput to 'idle' after selecting an edge
+        window.userInput = 'idle';
+        updateUserInputDisplay();
+    }
+}

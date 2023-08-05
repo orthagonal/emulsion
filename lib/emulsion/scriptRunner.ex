@@ -120,6 +120,8 @@ defmodule Emulsion.ScriptRunner do
 
   # calls the script that generates a tween between two frames
   def execute_generate_tween_frames(src_frame, dest_frame, tweenExp, output_dir) do
+    IO.puts "execute generate tween frames"
+    IO.inspect tweenExp
     Rambo.run(tween_shell(), [
       tween_script(),
       rife_dir(),
@@ -132,7 +134,7 @@ defmodule Emulsion.ScriptRunner do
 
   # calls the script that generates a tween between two frames
   def execute_generate_tween_video(src_frame, dest_frame, tween_exp, output_file) do
-    File.rm(output_file)
+    IO.puts "execute generate tween video"
     src_frame = convert_if_needed(src_frame)
     dest_frame = convert_if_needed(dest_frame)
 

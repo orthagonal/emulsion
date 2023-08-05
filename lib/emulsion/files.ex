@@ -165,35 +165,26 @@ defmodule Emulsion.Files do
   end
 
   def handle_call({:convert_disk_path_to_browser_path, disk_path}, _from, state) do
-    # IO.puts "convert_disk_path_to_browser_path #{disk_path}"
-
     # Replace backslashes with forward slashes
     forward_slash_path = String.replace(disk_path, "\\", "/")
-
     # Extract workspace folder from state
     workspace_folder = state.workspace_folder
-
     # If workspace_folder is present in disk_path, replace it. Else, return disk_path as is.
     browser_path =
       cond do
         workspace_folder != nil and workspace_folder != "" and
             String.contains?(forward_slash_path, workspace_folder) ->
-          # Replace workspace_folder with /file/video_folder
-          String.replace(forward_slash_path, workspace_folder, "/file/#{state.video_folder}")
-
+              # Replace workspace_folder with /file/video_folder
+             String.replace(forward_slash_path, workspace_folder, "/file/#{state.video_folder}")
         true ->
           forward_slash_path
       end
-
-    # IO.puts "result is #{browser_path}"
     {:reply, browser_path, state}
   end
 
   def handle_call({:convert_browser_path_to_disk_path, browser_path}, _from, state) do
     # Replace '/file/' with workspace_folder at the beginning of the path
-    IO.puts("converting #{browser_path} to disk path")
     disk_path = String.replace_prefix(browser_path, "/file/", "#{state.workspace_folder}/")
-    IO.puts("disk_path is #{disk_path}")
     # Remove duplicate directory name
     disk_path =
       Enum.join(

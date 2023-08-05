@@ -1,5 +1,19 @@
-<div class="container">
-  <%= if @mode == :select_initial_video do %>
+
+    <div class="flex">
+    <!-- Navigation Sidebar -->
+    <div class="w-1/4 bg-gray-100 h-screen overflow-auto sticky top-0">
+      <h2 class="text-2xl p-4 border-b border-gray-200">Navigation</h2>
+      <ul>
+        <li><a href="#macros">Macros and Shortcuts</a></li>
+        <li><a href="#manual">Manual Playgraph Functions</a></li>
+        <li><a href="#contextPanelEdge">Context Panel Edge</a></li>
+        <li><a href="#contextPanelNode">Context Panel Node</a></li>
+        <li><a href="#videoPlayer">Video Player</a></li>
+      </ul>
+    </div>
+
+    <div class="w-3/4 p-4">
+    <%= if @mode == :select_initial_video do %>
     <div class="grid-3 grid-rows">
       <button :for={file <- @files} phx-click="select_initial_video" phx-value-file={file} class="border-2 background-gray">
         <%= file %>
@@ -29,8 +43,8 @@
         <button type="submit">Load</button>
       </form>
       
-      <div class="border-2 shadow-lg">
-        <h2> Macros and Shortcuts</h2>
+      <div id="macros" class="p-4 mb-4 bg-gray-100 rounded">
+        <h2 class="text-2xl mb-2">Macros and Shortcuts</h2>
         <form phx-submit="divide_by">
           <input type="text" name="division_value" placeholder="Enter division value"/>
           <input type="text" name="start_at" placeholder="Enter start frame index"/>
@@ -50,23 +64,46 @@
           <button type="submit">Idleify Frame</button>
         </form>
 
+        <form phx-submit="blur_idleify_frame">
+          <input type="hidden" name="current_frame" value={@srcFrame}/>
+          <input type="hidden" name="connect_frame" value={@destFrame}/>
+          <input type="number" name="idle_range" placeholder="Enter blur range"/>
+          <button type="submit">Blur Idleify Frame</button>
+        </form>
 
         <button class="border-2 shadow-lg bg-slate-400" phx-click="set_source_to_dest">
           Set Source Frame to Dest Frame (useful shortcut)
         </button>
       </div>
-      <div class="border-2 shadow-lg">
-        <h2> Manual Playgraph Functions</h2>
+
+      <div id="manual" class="p-4 mb-4 bg-gray-100 rounded">
+        <h2 class="text-2xl mb-2">Manual Playgraph Functions</h2>
         <button class="border-2 shadow-lg bg-slate-400" phx-click="want_to_select_source">
           Select Source Frame
         </button>
         <button class="border-2 shadow-lg bg-slate-400" phx-click="want_to_select_dest">
           Select Dest Frame
         </button>  
-  
-        <button class="border-2 shadow-lg bg-slate-400" phx-click="generate_tween">
-          Tween Frames
-        </button>
+
+        <form class="border-3 shadow-lg" phx-submit="generate_tween">
+          <label for="tween_multiplier">Tween Multiplier:</label>
+          Multiplier is <%= @tween_multiplier %>
+          <input 
+            type="range" 
+            name="tween_multiplier" 
+            id="tween_multiplier" 
+            min="3" max="5" step="1" 
+            value={@tween_multiplier} 
+            phx-change="update_tween_multiplier" 
+          />
+          <label for="force_build">Force Build (deletes any previous tween)?</label>
+          <input type="checkbox" name="force_build" id="force_build" value="true" phx-change="update_force_build" />
+          <button type="submit" class="border-2 shadow-lg bg-slate-400">
+            Tween Frames
+          </button>
+        </form>
+            
+
         <button class="border-2 shadow-lg bg-slate-400" phx-click="generate_sequence">
           Generate Sequence
         </button>
@@ -79,18 +116,17 @@
     data_diagram_data={@diagram}>
   </div>
 
-    <div class="grid grid-cols-3 gap-4">
-      <div id="contextPanelEdge" phx-hook="ContextPanel" phx-update="ignore" 
-          class="col-span-1 w-full h-full border-sky-100" 
-          selected-edge-id={ @selected_edge_id }>
-      </div>
-      <div id="contextPanelNode" phx-hook="ContextPanel" phx-update="ignore" 
-        class="col-span-1 w-full h-full border-sky-100" 
-        data-selected-node-id={ @selected_node_id }>
-      </div>
-    </div>
+  <div id="contextPanelEdge" phx-hook="ContextPanel" phx-update="ignore" 
+      class="col-span-1 w-full h-full border-sky-100" 
+      selected-edge-id={ @selected_edge_id }>
+  </div>
+
+  <div id="contextPanelNode" phx-hook="ContextPanel" phx-update="ignore" 
+    class="col-span-1 w-full h-full border-sky-100" 
+    data-selected-node-id={ @selected_node_id }>
+  </div>
     
-    <div id="video-player" class="border-2" phx-hook="VideoPlayer">
+  <div id="video-player" class="p-4 bg-gray-100 rounded" phx-hook="VideoPlayer">
       <video id="videoA" controls src={@current_video}>
       </video>
       <video id="videoB" controls>
@@ -133,18 +169,18 @@
     </div>
   </div>
   <% end %>
-
+</div>
   <div class="custom-menu hidden bg-white rounded shadow-lg z-50">
     <!-- Menu items will be inserted dynamically here -->
   </div>
 
   <form phx-submit="export_all" class="bg-blue rounded shadow-lg ">
     <label for="assets_path">Assets Path:</label>
-    <input type="text" name="assets_path" id="assets_path" phx-value-assets_path={@assets_path} />
-  
+    <input type="text" name="assets_path" id="assets_path" value={@assets_path} />
+    
     <label for="title">Title:</label>
-    <input type="text" name="title" id="title" phx-value-title={@title} />
-  
+    <input type="text" name="title" id="title" value={@title} />
+    
     <button type="submit">Export All</button>
   </form>
   

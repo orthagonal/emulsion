@@ -94,15 +94,15 @@ defmodule Emulsion.Video do
     end
   end
 
-  def generate_tween_and_video(src_frame, dest_frame, tween_length) do
+  def generate_tween_and_video(src_frame, dest_frame, tween_multiplier) do
     GenServer.call(
       __MODULE__,
-      {:generate_tween_and_video, src_frame, dest_frame, tween_length},
+      {:generate_tween_and_video, src_frame, dest_frame, tween_multiplier},
       999_999
     )
   end
 
-  def handle_call({:generate_tween_and_video, src_frame, dest_frame, tween_length}, _from, state) do
+  def handle_call({:generate_tween_and_video, src_frame, dest_frame, tween_multiplier, force_build}, _from, state) do
     # Generate the tween frames
     output_dir = GenServer.call(Emulsion.Files, {:get_file_path, "", :tween_folder, :disk})
     # get the src_framebase as just the file name without the extension
@@ -110,19 +110,23 @@ defmodule Emulsion.Video do
     dest_framebase = Path.basename(dest_frame, Path.extname(dest_frame))
     output_file = Path.join(output_dir, "#{src_framebase}_to_#{dest_framebase}.#{@videoFormat}")
     # if the tween already exists then notify and just return the file name:
+    if force_build == "true" do
+      # Delete the output file if it exists
+      if File.exists?(output_file) do
+        File.rm!(output_file)
+      end
+    end
     if File.exists?(output_file) do
       IO.puts("Tween already exists, returning #{output_file}")
       {:reply, output_file, state}
     else
       IO.puts("Tween does not exist, generating #{output_file}")
-
       Emulsion.ScriptRunner.execute_generate_tween_video(
         src_frame,
         dest_frame,
-        tween_length,
+        tween_multiplier,
         output_file
       )
-
       {:reply, output_file, state}
     end
   end
