@@ -18,8 +18,10 @@ config :emulsion, EmulsionWeb.Endpoint,
     layout: false
   ],
   pubsub_server: Emulsion.PubSub,
-  live_view: [signing_salt: "/qGq5dpX"]
-
+  live_view: [
+    uploads: [max_file_size: 20_000_000],
+    signing_salt: "/qGq5dpX"
+  ]
 # Configures the mailer
 #
 # By default it uses the "Local" adapter which stores the emails

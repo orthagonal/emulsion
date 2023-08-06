@@ -265,20 +265,39 @@ def get_playgraph() do
     end)
   end
 
-  def handle_call({:delete_edge, node_name, edge_id}, _from, state) do
+  def handle_call({:delete_edge, edge_id}, _from, state) do
+    # Assuming each edge has a "source" key, get the source node's name
+    edge_to_delete = Enum.find(state["edges"], fn edge -> edge["id"] == edge_id end)
+    source_node_name = edge_to_delete["from"]
+    dest_node_name = edge_to_delete["to"]
+
+    IO.puts "source node name: #{source_node_name}"
+    IO.puts "dest node name: #{dest_node_name}"
+
+    # Step 2: Remove the edge from the source node's "edges" list
     nodes =
       Enum.map(state["nodes"], fn node ->
-        if node["name"] == node_name do
+        if node["name"] == source_node_name do
           edges = Enum.filter(node["edges"], fn edge -> edge["id"] != edge_id end)
-
           Map.put(node, "edges", edges)
         else
           node
         end
       end)
 
+    # Step 3: Check if source or dest node has an empty "edges" list, and if so, remove the node
+    nodes =
+      Enum.filter(nodes, fn node ->
+        cond do
+          node["name"] == source_node_name -> length(node["edges"]) > 0
+          node["name"] == dest_node_name -> length(node["edges"]) > 0
+          true -> true
+        end
+      end)
+
     {:reply, :ok, Map.put(state, "nodes", nodes)}
   end
+
 
   def tag_edge(edge_id, tag) when is_list(tag) do
     Enum.map(tag, fn tag -> tag_edge(edge_id, tag) end)

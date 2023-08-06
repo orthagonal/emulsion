@@ -288,6 +288,7 @@ Hooks.ContextPanel = {
       <p>Edge From: ${edge.from}</p>
       <p>Edge To: ${edge.to}</p>
       <button data-action="goto">Goto</button>
+      <button data-action="delete">Delete Edge</button>
       <div>
         <input type="text" id="tag-input" placeholder="Enter tag">
         <button data-action="tag">Tag</button>
@@ -306,6 +307,10 @@ Hooks.ContextPanel = {
     let gotoButton = document.querySelector('button[data-action="goto"]');
     gotoButton.addEventListener('click', () => {
       window.VideoPlayer.queueVideo(edge.path);
+    });
+    let deleteButton = document.querySelector('button[data-action="delete"]');
+    deleteButton.addEventListener('click', function () {
+      self.pushEvent("delete_edge", { edge_id: edge.id });
     });
   },
 

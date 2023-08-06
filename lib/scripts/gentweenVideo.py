@@ -124,6 +124,7 @@ else:
         for j in range(len(img_list) - 1):
             print(j)
             printMem()
+            print(img_list)
             mid = model.inference(img_list[j], img_list[j + 1])
             tmp.append(img_list[j])
             tmp.append(mid)

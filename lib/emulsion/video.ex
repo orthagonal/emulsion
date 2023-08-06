@@ -40,6 +40,44 @@ defmodule Emulsion.Video do
     {:reply, true, %{state | working_file: original_video_name}}
   end
 
+  def generate_next_filename(frame_files) do
+    # Extract frame numbers from filenames
+    frame_numbers = Enum.map(frame_files, &Emulsion.Files.extract_frame_number/1)
+    # Get the maximum frame number
+    max_frame_number = Enum.max(frame_numbers)
+
+    # Generate new filename for the next frame
+    new_frame_number = max_frame_number + 1
+
+  # Split one of the filenames to get the base name and the extension
+  [base_name, _old_number, extension] =
+    frame_files
+    |> List.first()
+    |> String.split(["_", "."])
+
+    # Construct new filename
+    "#{base_name}_#{new_frame_number}.#{extension}"
+  end
+
+
+  def handle_call({:handle_upload, image, working_root}, _from, state) do
+    # 1. Get the paths
+    frames_path = GenServer.call(Emulsion.Files, {:get_file_path, "", :frame_folder, :disk})
+    thumbs_path = GenServer.call(Emulsion.Files, {:get_file_path, "", :thumbs_folder, :disk})
+
+    # 2. Rename the image to be the next frame in the sequence
+    frame_files = File.ls!(frames_path)
+    new_file_name = generate_next_filename(frame_files)
+    new_frame_path = Path.join([frames_path, new_file_name])
+    File.cp(image, new_frame_path)
+
+    # 3. Generate thumbnail and save it in thumbs folder
+    new_thumb_path = Path.join([thumbs_path, Path.basename(new_frame_path)])
+    Emulsion.ScriptRunner.execute_transform_image_to_thumb(new_frame_path, new_thumb_path)
+
+    {:reply, new_thumb_path, state}
+  end
+
   def handle_call({:split_video_into_frames}, _from, state) do
     frames_path = GenServer.call(Emulsion.Files, {:get_file_path, "", :frame_folder, :disk})
     thumbs_path = GenServer.call(Emulsion.Files, {:get_file_path, "", :thumbs_folder, :disk})

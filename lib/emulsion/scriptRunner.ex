@@ -65,11 +65,27 @@ defmodule Emulsion.ScriptRunner do
         framesPath |> path_for_sequential_shell
       ],
       cd: "c:/GitHub/emulsion",
-      log: false
+      log: true
     )
   end
 
   # calls the script that splits your video into individual thumbs
+  # this also works when videoPath is just a jpg or a png as well
+  def execute_transform_image_to_thumb(videoPath, thumbsPath) do
+    Rambo.run(
+      sequential_shell(),
+      [
+        one_thumb_script(),
+        videoPath |> path_for_sequential_shell,
+        thumbsPath |> path_for_sequential_shell
+      ],
+      cd: "c:/GitHub/emulsion",
+      log: true
+    )
+  end
+
+  # calls the script that splits your video into individual thumbs
+  # this also works when videoPath is just a jpg or a png as well
   def execute_split_video_into_thumbs(videoPath, thumbsPath) do
     Rambo.run(
       sequential_shell(),
@@ -79,26 +95,7 @@ defmodule Emulsion.ScriptRunner do
         thumbsPath |> path_for_sequential_shell
       ],
       cd: "c:/GitHub/emulsion",
-      log: false
-    )
-  end
-
-  # calls the script that splits your video into individual thumbs
-  def execute_extract_one_thumb_from_video(videoPath, thumbnail_path) do
-    IO.puts("******")
-    IO.inspect(videoPath |> path_for_sequential_shell)
-    IO.inspect(thumbnail_path |> path_for_sequential_shell)
-
-    IO.inspect(
-      Rambo.run(
-        sequential_shell(),
-        [
-          one_thumb_script(),
-          videoPath |> path_for_sequential_shell,
-          thumbnail_path |> path_for_sequential_shell
-        ],
-        cd: "c:/GitHub/emulsion"
-      )
+      log: true
     )
   end
 
@@ -165,7 +162,8 @@ defmodule Emulsion.ScriptRunner do
           # $5 is the ffmpeg parameters
           ffmpeg_params(),
           output_file
-        ])
+        ],
+        log: true)
     end
   end
 

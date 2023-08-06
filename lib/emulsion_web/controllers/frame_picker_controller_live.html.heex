@@ -10,6 +10,26 @@
         <li><a href="#contextPanelNode">Context Panel Node</a></li>
         <li><a href="#videoPlayer">Video Player</a></li>
       </ul>
+      <button class="border-2 shadow-lg bg-slate-400" phx-click="reset">
+        Reset Workspace
+      </button>
+      <div class="flex flex-col h-full">
+        <div class="border-2 relative flex-1" phx-click="want_to_select_source">
+          <h1 class="text-3xl font-bold text-gray" >
+            Source Frame
+          </h1>
+          <p class="text-xs z-10 absolute top-0 left-0 bg-white"><%= @srcFrame |> Path.basename %></p>
+          <img class="w-full h-full object-cover" src={@srcFrame} alt="background image">
+        </div>
+  
+        <div class="border-2 relative flex-1" phx-click="want_to_select_dest">
+          <h1 class="">
+            Dest Frame
+          </h1>
+          <p class="text-xs z-10 absolute top-0 left-0 bg-white"><%= @destFrame |> Path.basename %></p>
+          <img class="w-full h-full object-cover" src={@destFrame} alt="background image">
+        </div>
+      </div>
     </div>
 
     <div class="w-3/4 p-4">
@@ -110,11 +130,15 @@
       </div>
 
     </div>
-    <div
-    id="mynetwork" phx-hook="VisNetwork" phx-update="ignore" 
-    class="col-span-2 w-full h-96  border-sky-100"
-    data_diagram_data={@diagram}>
-  </div>
+    
+    <div class="p-4 mb-4 bg-gray-100 rounded" >
+      <h2 class="text-2xl mb-2">Playgraph</h2>
+      <div
+        id="mynetwork" phx-hook="VisNetwork" phx-update="ignore" 
+        class="col-span-2 w-full h-96  border-sky-100"
+        data_diagram_data={@diagram}>
+      </div>
+    </div>
 
   <div id="contextPanelEdge" phx-hook="ContextPanel" phx-update="ignore" 
       class="col-span-1 w-full h-full border-sky-100" 
@@ -125,7 +149,7 @@
     class="col-span-1 w-full h-full border-sky-100" 
     data-selected-node-id={ @selected_node_id }>
   </div>
-    
+
   <div id="video-player" class="p-4 bg-gray-100 rounded" phx-hook="VideoPlayer">
       <video id="videoA" controls src={@current_video}>
       </video>
@@ -136,28 +160,17 @@
     </div>
     <div class="flex h-screen">
       <div id="left-column" class="w-1/4 overflow-auto">
-        <div class="flex flex-col h-full">
-          <div class="border-2 relative flex-1" phx-click="want_to_select_source">
-            <h1 class="text-3xl font-bold text-gray" >
-              Source Frame
-            </h1>
-            <p class="text-xs z-10 absolute top-0 left-0 bg-white"><%= @srcFrame |> Path.basename %></p>
-            <img class="w-full h-full object-cover" src={@srcFrame} alt="background image">
-          </div>
-    
-          <div class="border-2 relative flex-1" phx-click="want_to_select_dest">
-            <h1 class="">
-              Dest Frame
-            </h1>
-            <p class="text-xs z-10 absolute top-0 left-0 bg-white"><%= @destFrame |> Path.basename %></p>
-            <img class="w-full h-full object-cover" src={@destFrame} alt="background image">
-          </div>
-        </div>
+        
       </div>
     
       <div>
         <input id="scroll_to_thumb" type="text" phx-hook="ScrollToThumb" placeholder="Type to scroll..."/>
-    </div>
+        <form  phx-submit="import_external_frame" phx-change="validate_upload" >
+          <.live_file_input upload={@uploads.image} />
+          <button type="submit">Import a Frame</button>
+        </form>
+      
+      </div>
       <div id="right-column" class="w-3/4 overflow-auto">
         <div class="flex-1 overflow-y-scroll grid grid-cols-4" id="thumbGrid">
           <div :for={thumb <- @thumbFiles} class="border-2 relative" phx-click="click_frame", phx-value-frame={thumb}>
@@ -174,14 +187,15 @@
     <!-- Menu items will be inserted dynamically here -->
   </div>
 
-    <div class="w-1/4 bg-gray-100 h-screen overflow-auto sticky top-0">
-      <h2 class="text-2xl p-4 border-b border-gray-200">Export Module</h2>
-      <form phx-submit="export_all" class="bg-blue rounded shadow-lg ">
-        <label for="assets_path">Assets Path:</label>
-        <input type="text" name="assets_path" id="assets_path" value={@assets_path} />
-        <label for="title">Title:</label>
-        <input type="text" name="title" id="title" value={@title} />
-        <button type="submit">Export All</button>
+  <div class="w-1/4 bg-gray-100 h-screen overflow-auto sticky top-0">
+    <h2 class="text-2xl p-4 border-b border-gray-200">Export Module</h2>
+    <form phx-submit="export_all" class="bg-blue rounded shadow-lg grid grid-cols-2 gap-4 p-4">
+      <label for="assets_path" class="self-center">Assets Path:</label>
+      <input type="text" name="assets_path" id="assets_path" value={@assets_path} />
+      <label for="title" class="self-center">Title:</label>
+      <input type="text" name="title" id="title" value={@title} />
+      <div></div>
+      <button type="submit">Export All</button>
     </form>
   </div>
 </div>

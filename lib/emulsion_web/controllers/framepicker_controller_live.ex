@@ -15,15 +15,24 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     edges = []
     diagram = Jason.encode!(%{nodes: nodes, edges: edges})
 
-    {
-      :ok,
+    # if they already selected a video in the previous session use that
+    # and set initial mode to select_src_frame
+    current_video =
+      case Emulsion.Repo.one(Emulsion.SavedState) do
+        nil -> ""
+        saved_state -> saved_state.initial_video
+      end
+
+    mode = if current_video == "", do: :select_initial_video, else: :select_source_frame
+
+    socket =
       assign(socket,
         assets_path: "",
         title: "",
         working_root: "e:/emulsion_workspace",
-        mode: :select_initial_video,
+        mode: mode,
         files: files,
-        current_video: "",
+        current_video: current_video,
         diagram: diagram,
         saved_playgraph_filename: "",
         saved_playgraphs: [],
@@ -31,9 +40,86 @@ defmodule EmulsionWeb.FramePickerControllerLive do
         selected_node_id: "",
         selected_edge_id: "",
         tween_multiplier: 5,
-        force_build: false
+        force_build: false,
+        uploaded_files: []
       )
-    }
+      |> allow_upload(:image, accept: ~w(.jpg .jpeg .png), max_entries: 1)
+
+    if current_video != "" do
+      socket = setup_workspace(current_video, socket)
+      {:ok, socket}
+    else
+      {:ok, socket}
+    end
+  end
+
+  defp setup_workspace(file, socket) do
+    case GenServer.call(Emulsion.Video, {:set_working_video, file, socket.assigns.working_root}) do
+      true ->
+        IO.puts("SET WORKING VIDEO TO #{file}")
+        thumbFiles = GenServer.call(Emulsion.Video, {:split_video_into_frames}, :infinity)
+        saved_playgraphs_path = Path.join([socket.assigns.working_root, "saved_playgraphs"])
+        saved_playgraphs = Emulsion.Playgraph.get_saved_playgraphs(saved_playgraphs_path)
+        selected_playgraph = saved_playgraphs |> List.first("")
+
+        socket
+        |> assign(%{
+          mode: :select_source_frame,
+          thumbFiles: thumbFiles,
+          srcFrame: thumbFiles |> List.first(),
+          destFrame: thumbFiles |> List.last(),
+          saved_playgraphs: saved_playgraphs,
+          selected_playgraph: selected_playgraph
+        })
+
+      false ->
+        IO.puts("error setting working video")
+        IO.puts("error setting working video")
+        IO.puts("error setting working video")
+        put_flash(socket, :error, "Error setting working video")
+    end
+  end
+
+  # this barebones function must exist for liveview to handle the file upload
+  # automagically
+  def handle_event("validate_upload", params, socket) do
+    {:noreply, socket}
+  end
+
+  @doc """
+    reset the workspace
+  """
+  def handle_event("reset", _value, socket) do
+    case Emulsion.Repo.one(Emulsion.SavedState) do
+      nil -> :ok
+      saved_state -> Emulsion.Repo.delete(saved_state)
+    end
+
+    # Reset socket assigns
+    {:noreply, assign(socket, :mode, :select_initial_video)}
+  end
+
+  # when they select the initial video, make/set the workspace for that video
+  # and populate the frame and thumb folders
+  # set the mode to :select_source_frame
+  def handle_event("select_initial_video", %{"file" => file} = event, socket) do
+    # Save the selected initial video
+    saved_state = Emulsion.Repo.one(Emulsion.SavedState)
+
+    changeset =
+      Emulsion.SavedState.changeset(saved_state || %Emulsion.SavedState{}, %{initial_video: file})
+
+    case Emulsion.Repo.insert_or_update(changeset) do
+      {:ok, _saved_state} ->
+        IO.puts("success")
+
+      {:error, _changeset} ->
+        IO.puts("FAILED")
+        # handle this error as you see fit
+        {:noreply, socket}
+    end
+
+    {:noreply, setup_workspace(file, socket)}
   end
 
   def handle_event("update_export_file", %{"export_file" => export_file}, socket) do
@@ -53,35 +139,6 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     {:noreply, socket}
   end
 
-  # when they select the initial video, make/set the workspace for that video
-  # and populate the frame and thumb folders
-  # set the mode to :select_source_frame
-  def handle_event("select_initial_video", %{"file" => file} = event, socket) do
-    case GenServer.call(Emulsion.Video, {:set_working_video, file, socket.assigns.working_root}) do
-      true ->
-        thumbFiles = GenServer.call(Emulsion.Video, {:split_video_into_frames}, :infinity)
-        saved_playgraphs_path = Path.join([socket.assigns.working_root, "saved_playgraphs"])
-        saved_playgraphs = Emulsion.Playgraph.get_saved_playgraphs(saved_playgraphs_path)
-        selected_playgraph = saved_playgraphs |> List.first("")
-
-        {:noreply,
-         socket
-         |> assign(%{
-           # mode: :want_to_select_source,
-           mode: :select_source_frame,
-           thumbFiles: thumbFiles,
-           srcFrame: thumbFiles |> List.first(),
-           destFrame: thumbFiles |> List.last(),
-           saved_playgraphs: saved_playgraphs,
-           selected_playgraph: selected_playgraph
-         })}
-
-      false ->
-        IO.puts("error setting working video")
-        {:noreply, put_flash(socket, :error, "Error setting working video")}
-    end
-  end
-
   def handle_event("want_to_select_source", event, socket) do
     {:noreply, assign(socket, mode: :select_source_frame)}
   end
@@ -89,6 +146,31 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   def handle_event("want_to_select_dest", event, socket) do
     {:noreply, assign(socket, mode: :select_dest_frame)}
   end
+
+  def handle_event("import_external_frame", params, socket) do
+    # handles writing and thumbnailing the imported frame
+    uploaded_files =
+      consume_uploaded_entries(socket, :image, fn %{path: path}, _entry ->
+        new_thumb_path =
+          GenServer.call(Emulsion.Video, {:handle_upload, path, socket.assigns.working_root})
+        {:ok, new_thumb_path}
+      end)
+
+    # update the thumbs list:
+    thumbs_list = GenServer.call(Emulsion.Files, {:get_file_list, :thumbs_folder, :browser})
+
+    {:noreply,
+     assign(
+       socket,
+       %{
+         uploaded_files: &(&1 ++ uploaded_files),
+         thumbFiles: thumbs_list
+       }
+     )}
+  end
+
+  #   {:noreply, socket}
+  # end
 
   # handle the pubsub :operation_complete message
   def handle_info({:operation_complete, msg}, socket) do
@@ -156,12 +238,12 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     {:noreply, socket}
   end
 
-  def handle_event("update_force_build",  params, socket) do
+  def handle_event("update_force_build", params, socket) do
     force_build = Map.get(params, "force_build", false)
     {:noreply, assign(socket, force_build: force_build)}
   end
 
-  def handle_event("update_tween_multiplier",  params, socket) do
+  def handle_event("update_tween_multiplier", params, socket) do
     tween_multiplier = Map.get(params, "tween_multiplier", 5)
     tween_multiplier_number = tween_multiplier
     {:noreply, assign(socket, tween_multiplier: tween_multiplier_number)}
@@ -173,12 +255,22 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   def handle_event("generate_tween", event, socket) do
     srcFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, socket.assigns.srcFrame})
     destFrame = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, socket.assigns.destFrame})
+    IO.puts "generating tween"
+    IO.puts "generating tween"
+    IO.puts "generating tween"
+    IO.puts "generating tween"
+    IO.inspect srcFrame
+    IO.inspect destFrame
+
     tween_multiplier_number = Map.get(socket.assigns, :tween_multiplier, 5)
-    tween_multiplier = if is_integer(tween_multiplier_number) do
-      Integer.to_string(tween_multiplier_number)
-    else
-      tween_multiplier_number
-    end
+
+    tween_multiplier =
+      if is_integer(tween_multiplier_number) do
+        Integer.to_string(tween_multiplier_number)
+      else
+        tween_multiplier_number
+      end
+
     force_build = Map.get(socket.assigns, :force_build, false)
     # make a call for this that wraps the GenServer cast and does the Task.start_link stuff
     # so that it can call back when the tween is done
@@ -190,22 +282,18 @@ defmodule EmulsionWeb.FramePickerControllerLive do
           Emulsion.Video,
           {:generate_tween_and_video, srcFrame, destFrame, tween_multiplier, force_build},
           999_999
-      )
-      IO.puts "the call is done"
-      IO.puts("video name is #{video_name}")
+        )
+
       basename = Path.basename(video_name)
       # convert the video name to one suitable for use in the browser with the '/file/' prefix
-      IO.puts "calling emulasion files"
+
       video_name =
         GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
-      IO.puts "done calling emulasion files"
+
       # add nodes and edge to the graph
       Emulsion.Playgraph.add_node(srcFrame)
-      IO.puts "added srcFrame to graph"
       Emulsion.Playgraph.add_node(destFrame)
-      IO.puts "added destFrame to graph"
       Emulsion.Playgraph.add_edge(srcFrame, destFrame, basename, video_name)
-      IO.puts "added edge to graph"
       send(pid, {:tween_generated, video_name})
     end)
 
@@ -225,18 +313,15 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   end
 
   def handle_info({:tween_generated, video_name}, socket) do
-    IO.puts "tween was generated"
     nodes = GenServer.call(Emulsion.Playgraph, {:get_nodes})
     edges = GenServer.call(Emulsion.Playgraph, {:get_edges})
-    IO.puts "got nodes and edges"
-    IO.inspect video_name
-    IO.inspect nodes
-    IO.inspect edges
+
     newsocket =
       socket
       |> assign(current_video: video_name)
       |> push_event("update_graph", %{nodes: nodes, edges: edges})
-    IO.puts "pushed event"
+
+    IO.puts("pushed event")
     {:noreply, newsocket}
   end
 
@@ -300,9 +385,9 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   end
 
   defp handle_tween_result(video_name, srcFrame, destFrame, pid) do
-    IO.puts "handling tween result"
+    IO.puts("handling tween result")
     video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, video_name})
-    IO.inspect video_name
+    IO.inspect(video_name)
     # Add nodes and edge to the graph
     Emulsion.Playgraph.add_node(srcFrame)
     Emulsion.Playgraph.add_node(destFrame)
@@ -327,6 +412,14 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     IO.inspect(Emulsion.Playgraph.get_edges())
     {:noreply, socket}
   end
+
+  def handle_event("delete_edge", %{"edge_id" => edge_id}, socket) do
+    # Call the Playgraph's :delete_edge handler:
+    {:ok, _result} = GenServer.call(Emulsion.Playgraph, {:delete_edge, edge_id})
+
+    # Do any further processing if needed, and update the socket:
+    {:noreply, socket}
+end
 
   def handle_event("idle_around_frame", %{"src_frame" => src_frame, "range" => range}, socket) do
     IO.puts("*********************************")
@@ -354,24 +447,32 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   end
 
   def handle_event(
-      "idleify_frame",
-      %{
-        "current_frame" => current_frame,
-        "idle_range" => idle_range,
-        "connect_frame" => connect_frame
-      },
-      socket
-    ) do
-  force_build = socket.assigns.force_build
-  tween_multiplier = socket.assigns.tween_multiplier
-  case Emulsion.Idioms.idleify_frame(current_frame, idle_range, connect_frame, tween_multiplier, force_build, self()) do
-    {:ok, _} ->
-      {:noreply, socket}
+        "idleify_frame",
+        %{
+          "current_frame" => current_frame,
+          "idle_range" => idle_range,
+          "connect_frame" => connect_frame
+        },
+        socket
+      ) do
+    force_build = socket.assigns.force_build
+    tween_multiplier = socket.assigns.tween_multiplier
 
-    {:error, _} ->
-      {:noreply, socket}
+    case Emulsion.Idioms.idleify_frame(
+           current_frame,
+           idle_range,
+           connect_frame,
+           tween_multiplier,
+           force_build,
+           self()
+         ) do
+      {:ok, _} ->
+        {:noreply, socket}
+
+      {:error, _} ->
+        {:noreply, socket}
+    end
   end
-end
 
   def handle_event("export_all", %{"assets_path" => assets_path, "title" => title}, socket) do
     # Get the playgraph from the playgraph server
@@ -386,9 +487,8 @@ end
     }
 
     # Call Exporter.export_all
-    Emulsion.Exporter.export_all( title,  playgraph, templates, assets_path)
+    Emulsion.Exporter.export_all(title, playgraph, templates, assets_path)
 
     {:noreply, assign(socket, assets_path: assets_path, title: title)}
   end
-
 end
