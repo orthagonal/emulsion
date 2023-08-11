@@ -1,6 +1,9 @@
+<div class="flex flex-col h-screen"> <!-- Add flex-col here to make children stack vertically -->
 
-    <div class="flex">
-    <!-- Navigation Sidebar -->
+  <!-- Main Columns -->
+  <div class="flex flex-row flex-grow"> <!-- Add flex-grow to make this section take up all available space before footer -->
+
+      <!-- Navigation Sidebar -->
     <div class="w-1/4 bg-gray-100 h-screen overflow-auto sticky top-0">
       <h2 class="text-2xl p-4 border-b border-gray-200">Navigation</h2>
       <ul>
@@ -84,7 +87,7 @@
           <button type="submit">Idleify Frame</button>
         </form>
 
-        <form phx-submit="blur_idleify_frame">
+        <form phx-submit="idleify_blur_frame">
           <input type="hidden" name="current_frame" value={@srcFrame}/>
           <input type="hidden" name="connect_frame" value={@destFrame}/>
           <input type="number" name="idle_range" placeholder="Enter blur range"/>
@@ -98,12 +101,6 @@
 
       <div id="manual" class="p-4 mb-4 bg-gray-100 rounded">
         <h2 class="text-2xl mb-2">Manual Playgraph Functions</h2>
-        <button class="border-2 shadow-lg bg-slate-400" phx-click="want_to_select_source">
-          Select Source Frame
-        </button>
-        <button class="border-2 shadow-lg bg-slate-400" phx-click="want_to_select_dest">
-          Select Dest Frame
-        </button>  
 
         <form class="border-3 shadow-lg" phx-submit="generate_tween">
           <label for="tween_multiplier">Tween Multiplier:</label>
@@ -131,14 +128,7 @@
 
     </div>
     
-    <div class="p-4 mb-4 bg-gray-100 rounded" >
-      <h2 class="text-2xl mb-2">Playgraph</h2>
-      <div
-        id="mynetwork" phx-hook="VisNetwork" phx-update="ignore" 
-        class="col-span-2 w-full h-96  border-sky-100"
-        data_diagram_data={@diagram}>
-      </div>
-    </div>
+
 
   <div id="contextPanelEdge" phx-hook="ContextPanel" phx-update="ignore" 
       class="col-span-1 w-full h-full border-sky-100" 
@@ -164,6 +154,12 @@
       </div>
     
       <div>
+        <button class="border-2 shadow-lg bg-slate-400" phx-click="want_to_select_source">
+          Select Source Frame
+        </button>
+        <button class="border-2 shadow-lg bg-slate-400" phx-click="want_to_select_dest">
+          Select Dest Frame
+        </button>  
         <input id="scroll_to_thumb" type="text" phx-hook="ScrollToThumb" placeholder="Type to scroll..."/>
         <form  phx-submit="import_external_frame" phx-change="validate_upload" >
           <.live_file_input upload={@uploads.image} />
@@ -197,5 +193,12 @@
       <div></div>
       <button type="submit">Export All</button>
     </form>
+    <div class="bg-gray-100">
+      <h2 class="text-2xl mb-2">Playgraph</h2>
+      <div id="mynetwork" phx-hook="VisNetwork" phx-update="ignore" class="w-full h-96 border-sky-100" data_diagram_data={@diagram}></div>
+    </div>
   </div>
+  
+</div>
+
 </div>

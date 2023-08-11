@@ -174,11 +174,13 @@ defmodule Emulsion.Files do
       cond do
         workspace_folder != nil and workspace_folder != "" and
             String.contains?(forward_slash_path, workspace_folder) ->
-              # Replace workspace_folder with /file/video_folder
-             String.replace(forward_slash_path, workspace_folder, "/file/#{state.video_folder}")
+          # Replace workspace_folder with /file/video_folder
+          String.replace(forward_slash_path, workspace_folder, "/file/#{state.video_folder}")
+
         true ->
           forward_slash_path
       end
+
     {:reply, browser_path, state}
   end
 
@@ -196,6 +198,23 @@ defmodule Emulsion.Files do
 
     # Return the converted disk_path
     {:reply, disk_path, state}
+  end
+
+  def handle_call({:convert_frame_path_to_thumb_path, frame_path}, _from, state) do
+    thumb_path = convert_frame_path_to_thumb_path(frame_path, state)
+    {:reply, thumb_path, state}
+  end
+
+  defp convert_frame_path_to_thumb_path(frame_path, state) do
+    # If path is already in the correct format
+    if String.starts_with?(frame_path, "/file/") and String.contains?(frame_path, "/thumbs/") do
+      frame_path
+    else
+      # Existing logic
+      relative_frame_path = String.replace(frame_path, ~r{^/file/\w+/frames/}, "")
+      thumb_folder = get_folder_path(state, :thumbs_folder)
+      Path.join([thumb_folder, relative_frame_path])
+    end
   end
 
   defp convert_thumb_path_to_frame_path(thumb_path, state) do
@@ -295,16 +314,55 @@ defmodule Emulsion.Files do
   get the pathname for the frame that is 'distance' from the source_frame
   direction can be one of either :forward or :backward
   """
-  def get_frame(source_frame, direction, distance) do
-    source_frame_number = extract_frame_number(source_frame)
+def get_frame(source_frame, direction, distance) do
+  # get the directory of the source frame
+  src_frame_dir = Path.dirname(source_frame)
 
-    target_frame_number =
-      if direction == :forward do
-        source_frame_number + distance
-      else
-        source_frame_number - distance
-      end
+  # list the files in it:
+  files = File.ls!(src_frame_dir)
 
-    String.replace(source_frame, "#{source_frame_number}", "#{target_frame_number}")
+  # Find the position of source_frame in the files list
+  src_frame_basename = Path.basename(source_frame)
+  source_position = Enum.find_index(files, fn file -> file == src_frame_basename end)
+
+  # Determine the target position based on direction and distance
+  target_position =
+    case direction do
+      :forward -> source_position + distance
+      :backward -> source_position - distance
+      _ -> source_position
+    end
+
+  # Fetch the target frame file based on the calculated position, handling edge cases
+  target_file =
+    case files do
+      [] -> nil # No files in directory
+      _ when target_position < 0 -> nil # Target is before the first frame
+      _ when target_position >= length(files) -> nil # Target is after the last frame
+      _ -> Enum.at(files, target_position)
+    end
+
+  # Construct the full path of the target file
+  case target_file do
+    nil -> nil # Handle situations where target doesn't exist as you see fit
+    _ -> Path.join(src_frame_dir, target_file)
+  end
+end
+
+
+
+
+  @doc """
+  Retrieve the frame that's one step after the provided frame.
+  """
+  def get_next_frame(frame_path) do
+    get_frame(frame_path, :forward, 1)
+  end
+
+  @doc """
+  Retrieve the frame that's one step before the provided frame.
+  """
+  def get_previous_frame(frame_path) do
+    get_frame(frame_path, :backward, 1)
   end
 end

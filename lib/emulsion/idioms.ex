@@ -35,8 +35,8 @@ defmodule Emulsion.Idioms do
         src_frame,
         dest_frame,
         ["idle", "from_src"],
-        force_build,
-        tween_multiplier
+        tween_multiplier,
+        force_build
       )
     end)
   end
@@ -48,8 +48,8 @@ defmodule Emulsion.Idioms do
         src_frame,
         dest_frame,
         ["idle", "to_src"],
-        force_build,
-        tween_multiplier
+        tween_multiplier,
+        force_build
       )
     end)
   end
@@ -65,11 +65,9 @@ defmodule Emulsion.Idioms do
         {:generate_tween_and_video, from_frame, to_frame, tween_multiplier, force_build},
         999_999
       )
-
     video_name = GenServer.call(Files, {:convert_disk_path_to_browser_path, video_name})
     basename = Path.basename(video_name)
 
-    Playgraph.add_node(to_frame)
     Playgraph.add_edge(from_frame, to_frame, basename, video_name)
     Playgraph.tag_edge(basename, tag)
 
@@ -113,7 +111,6 @@ defmodule Emulsion.Idioms do
   @doc """
   `idleify_frame/4` generates tweens to/from nearby or similar frames. This allows the player to 'idle' around a frame infinitely until the user chooses to move on.
   """
-
   def idleify_frame(current_frame, idle_range, connect_frame, tween_multiplier, force_build, pid) do
     # Prepare the frames
     {from_frame_path, to_frame_path, srcFrameNumber, destFrameNumber} =
@@ -165,6 +162,71 @@ defmodule Emulsion.Idioms do
       send(pid, {:sequence_generated, outputVideoName})
     end)
 
+    {:ok, pid}
+  end
+
+  @doc """
+  `idle_to/3` creates an idle tween that goes from the `current_frame` to the `dest_frame` and then another that goes back from the `dest_frame` to the `current_frame`.
+  """
+  def idle_to(current_frame, dest_frame, tween_multiplier, force_build) do
+    # Convert current and dest frames to their full paths
+    current_frame_path = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, current_frame})
+    dest_frame_path = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, dest_frame})
+
+    # Generate idle tween from current frame to destination frame
+    pid = self()
+    handle_forward_tween(pid, current_frame_path, dest_frame_path, tween_multiplier, force_build)
+    handle_backward_tween(pid, dest_frame_path, current_frame_path, tween_multiplier, force_build)
+  end
+
+  @doc """
+  `idleify_blur_frame/4` creates an overlay frame using the frame before and after the `current_frame`.
+  It then generates an idle tween for this overlay frame and finally creates a sequence from `src_frame` to `dest_frame`.
+  """
+  def idleify_blur_frame(current_frame, connect_frame, tween_multiplier, force_build, pid \\ self()) do
+    # Get the paths of current, previous, and next frames
+    current_frame_path = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, current_frame |> Path.basename})
+    prev_frame_path = Emulsion.Files.get_previous_frame(current_frame_path)
+    next_frame_path = Emulsion.Files.get_next_frame(current_frame_path)
+
+    # # the frames and thumb paths
+    frames_path = GenServer.call(Emulsion.Files, {:get_file_path, "", :frame_folder, :disk})
+    thumbs_path = GenServer.call(Emulsion.Files, {:get_file_path, "", :thumbs_folder, :disk})
+    # get the next-available filename
+    frame_files = File.ls!(frames_path)
+    # make the overlay frame be in the system temp folder
+    # TODO: must fix this
+    working_root = "e:/emulsion_workspace"
+    overlay_frame_path = Path.join([working_root, Emulsion.Video.generate_next_filename(frame_files)])
+
+    # overlay_frame_path = Path.join([frames_path, Emulsion.Video.generate_next_filename(frame_files)])
+
+    # Generate the overlay frame using the Scriptrunner
+    Emulsion.ScriptRunner.execute_overlay_frames(prev_frame_path, next_frame_path, overlay_frame_path)
+    new_thumb_path = GenServer.call(Emulsion.Video, {:handle_upload, overlay_frame_path, working_root}) |> Path.basename
+    # idle_to works off of the thumbs as input
+    current_thumb_path = current_frame_path |> String.replace(frames_path, thumbs_path) |> Path.basename
+    idle_to(current_thumb_path, new_thumb_path, tween_multiplier, force_build)
+    # Create a sequence from the src frame to the dest frame
+
+    if Emulsion.Files.extract_frame_number(current_frame) > Emulsion.Files.extract_frame_number(connect_frame) do
+      Emulsion.ScriptRunner.execute_generate_sequential_video(current_frame, connect_frame, tween_multiplier)
+    else
+      Emulsion.Video.generate_tween_and_video(current_frame, connect_frame, tween_multiplier, force_build)
+    end
+    IO.puts "adding c onnect frame"
+    IO.inspect connect_frame
+    # the idle_to call should have added the other nodes:
+    Playgraph.add_node(connect_frame)
+    Playgraph.add_node(current_frame)
+    IO.puts "adding edge from #{current_frame} to #{connect_frame}"
+    Playgraph.add_edge(current_frame, connect_frame, "next", "next")
+    IO.puts "i added that adge"
+    IO.puts "i added that adge"
+    IO.puts "i added that adge"
+    IO.puts "i added that adge"
+    IO.puts "i added that adge"
+    send(pid, {:sequence_generated, "avideo.webm"})
     {:ok, pid}
   end
 end

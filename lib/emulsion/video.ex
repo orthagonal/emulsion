@@ -43,22 +43,22 @@ defmodule Emulsion.Video do
   def generate_next_filename(frame_files) do
     # Extract frame numbers from filenames
     frame_numbers = Enum.map(frame_files, &Emulsion.Files.extract_frame_number/1)
+
     # Get the maximum frame number
     max_frame_number = Enum.max(frame_numbers)
 
     # Generate new filename for the next frame
     new_frame_number = max_frame_number + 1
 
-  # Split one of the filenames to get the base name and the extension
-  [base_name, _old_number, extension] =
-    frame_files
-    |> List.first()
-    |> String.split(["_", "."])
+    # Pad the new frame number to always be 4 digits
+    padded_frame_number = String.pad_leading(Integer.to_string(new_frame_number), 4, "0")
+
+    # Split one of the filenames to get the base name and the extension
+    [base_name, _old_number, extension] = frame_files |> List.first() |> String.split(["_", "."])
 
     # Construct new filename
-    "#{base_name}_#{new_frame_number}.#{extension}"
-  end
-
+    "#{base_name}_#{padded_frame_number}.#{extension}"
+end
 
   def handle_call({:handle_upload, image, working_root}, _from, state) do
     # 1. Get the paths
@@ -132,10 +132,10 @@ defmodule Emulsion.Video do
     end
   end
 
-  def generate_tween_and_video(src_frame, dest_frame, tween_multiplier) do
+  def generate_tween_and_video(src_frame, dest_frame, tween_multiplier, force_build) do
     GenServer.call(
       __MODULE__,
-      {:generate_tween_and_video, src_frame, dest_frame, tween_multiplier},
+      {:generate_tween_and_video, src_frame, dest_frame, tween_multiplier, force_build},
       999_999
     )
   end

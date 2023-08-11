@@ -80,6 +80,10 @@ defmodule EmulsionWeb.FramePickerControllerLive do
     end
   end
 
+  def handle_event("idle_to", params, socket) do
+
+  end
+
   # this barebones function must exist for liveview to handle the file upload
   # automagically
   def handle_event("validate_upload", params, socket) do
@@ -171,6 +175,12 @@ defmodule EmulsionWeb.FramePickerControllerLive do
 
   #   {:noreply, socket}
   # end
+  def handle_info({:blur_sequence_generated, msg}, socket) do
+    IO.puts "BLUR SEQUENCE GENERATED"
+
+    nodes = P
+    {:noreply, socket}
+  end
 
   # handle the pubsub :operation_complete message
   def handle_info({:operation_complete, msg}, socket) do
@@ -301,14 +311,19 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   end
 
   def handle_info({:sequence_generated, video_name}, socket) do
+    IO.puts "sequence was generated"
+    IO.puts "sequence was generated"
+    IO.puts "sequence was generated"
+    IO.puts "sequence was generated"
     nodes = GenServer.call(Emulsion.Playgraph, {:get_nodes})
     edges = GenServer.call(Emulsion.Playgraph, {:get_edges})
-
+    IO.inspect nodes
+    IO.inspect edges
     newsocket =
       socket
-      |> assign(current_video: video_name)
+      |> assign(current_video: video_name, nodes: nodes, edges: edges)
       |> push_event("update_graph", %{nodes: nodes, edges: edges})
-
+      IO.puts "updated new nodes"
     {:noreply, newsocket}
   end
 
@@ -443,6 +458,11 @@ end
       end)
     end)
 
+    {:noreply, socket}
+  end
+
+  def handle_event("idleify_blur_frame", params, socket) do
+    Emulsion.Idioms.idleify_blur_frame(socket.assigns.srcFrame, socket.assigns.destFrame, socket.assigns.tween_multiplier, socket.assigns.force_build, self())
     {:noreply, socket}
   end
 
