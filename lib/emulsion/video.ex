@@ -168,4 +168,42 @@ end
       {:reply, output_file, state}
     end
   end
+
+  def generate_sequence(srcFramePath, destFramePath, pid) do
+    srcFrameNumber = Emulsion.Files.extract_frame_number(srcFramePath)
+    destFrameNumber = Emulsion.Files.extract_frame_number(destFramePath)
+
+    IO.puts(" the frame numbers are #{srcFrameNumber} thru #{destFrameNumber}")
+
+    srcFolderPath = Path.dirname(srcFramePath) |> Emulsion.Files.convert_browser_path_to_disk_path
+    output_dir = GenServer.call(Emulsion.Files, {:get_file_path, "", :output_folder, :disk})
+
+    start_frame = srcFrameNumber
+    number_of_frames = destFrameNumber - srcFrameNumber + 1
+    IO.puts("start frame is #{start_frame} and number of frames is #{number_of_frames}")
+
+    outputVideoName = Path.join([output_dir, "#{srcFrameNumber}_thru_#{destFrameNumber}.webm"])
+
+    Emulsion.ScriptRunner.execute_generate_sequential_video(
+      srcFolderPath,
+      start_frame,
+      number_of_frames,
+      outputVideoName
+    )
+
+    video_name = GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, outputVideoName})
+
+    Emulsion.Playgraph.add_node(srcFramePath)
+    Emulsion.Playgraph.add_node(destFramePath)
+    Emulsion.Playgraph.add_edge(
+      srcFramePath,
+      destFramePath,
+      outputVideoName |> Path.basename(),
+      outputVideoName
+    )
+
+    IO.puts("script runner ran fine")
+    send(pid, {:sequence_generated, video_name})
+    outputVideoName
+  end
 end

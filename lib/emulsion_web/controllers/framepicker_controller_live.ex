@@ -198,51 +198,14 @@ defmodule EmulsionWeb.FramePickerControllerLive do
   # def handle_event("toggle_video_preview", event, socket) do
   #   {:noreply, assign(socket, videoPreviewVisible: !socket.assigns.videoPreviewVisible)}
   # end
-  def handle_event("generate_sequence", event, socket) do
-    srcFramePath =
-      GenServer.call(Emulsion.Files, {:get_frame_from_thumb, socket.assigns.srcFrame})
+  def handle_event("generate_sequence", _event, socket) do
+    srcFramePath = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, socket.assigns.srcFrame})
+    destFramePath = GenServer.call(Emulsion.Files, {:get_frame_from_thumb, socket.assigns.destFrame})
 
-    destFramePath =
-      GenServer.call(Emulsion.Files, {:get_frame_from_thumb, socket.assigns.destFrame})
-
-    srcFrameNumber = Emulsion.Files.extract_frame_number(srcFramePath)
-    destFrameNumber = Emulsion.Files.extract_frame_number(destFramePath)
-
-    IO.puts(" the frame numbers is #{srcFrameNumber} thru #{destFrameNumber}")
-
-    srcFolderPath = Path.dirname(srcFramePath)
-    output_dir = GenServer.call(Emulsion.Files, {:get_file_path, "", :output_folder, :disk})
-
-    start_frame = srcFrameNumber
-    number_of_frames = destFrameNumber - srcFrameNumber + 1
-    IO.puts("start frame is #{start_frame} and number of frames is #{number_of_frames}")
-    outputVideoName = Path.join([output_dir, "#{srcFrameNumber}_thru_#{destFrameNumber}.webm"])
     pid = self()
 
-    # call a Task.start_link that calls the script runner
     Task.start_link(fn ->
-      Emulsion.ScriptRunner.execute_generate_sequential_video(
-        srcFolderPath,
-        start_frame,
-        number_of_frames,
-        outputVideoName
-      )
-
-      video_name =
-        GenServer.call(Emulsion.Files, {:convert_disk_path_to_browser_path, outputVideoName})
-
-      Emulsion.Playgraph.add_node(srcFramePath)
-      Emulsion.Playgraph.add_node(destFramePath)
-
-      Emulsion.Playgraph.add_edge(
-        srcFramePath,
-        destFramePath,
-        outputVideoName |> Path.basename(),
-        outputVideoName
-      )
-
-      IO.puts("script runner ran fine")
-      send(pid, {:sequence_generated, video_name})
+      Emulsion.Video.generate_sequence(srcFramePath, destFramePath, pid)
     end)
 
     {:noreply, socket}

@@ -207,26 +207,20 @@ defmodule Emulsion.Idioms do
     # idle_to works off of the thumbs as input
     current_thumb_path = current_frame_path |> String.replace(frames_path, thumbs_path) |> Path.basename
     idle_to(current_thumb_path, new_thumb_path, tween_multiplier, force_build)
-    # Create a sequence from the src frame to the dest frame
+    # # Create a sequence from the src frame to the dest frame
 
     if Emulsion.Files.extract_frame_number(current_frame) > Emulsion.Files.extract_frame_number(connect_frame) do
-      Emulsion.ScriptRunner.execute_generate_sequential_video(current_frame, connect_frame, tween_multiplier)
-    else
       Emulsion.Video.generate_tween_and_video(current_frame, connect_frame, tween_multiplier, force_build)
+    else
+      output_video_name = Emulsion.Video.generate_sequence(current_frame, connect_frame, pid)
+      IO.puts "adding c onnect frame"
+      IO.inspect connect_frame
+      # the idle_to call should have added the other nodes:
+      Playgraph.add_node(connect_frame)
+      Playgraph.add_node(current_frame)
+      IO.puts "adding edge from #{current_frame} to #{connect_frame}"
+      Playgraph.add_edge(current_frame, connect_frame, Path.basename(output_video_name), output_video_name)
     end
-    IO.puts "adding c onnect frame"
-    IO.inspect connect_frame
-    # the idle_to call should have added the other nodes:
-    Playgraph.add_node(connect_frame)
-    Playgraph.add_node(current_frame)
-    IO.puts "adding edge from #{current_frame} to #{connect_frame}"
-    Playgraph.add_edge(current_frame, connect_frame, "next", "next")
-    IO.puts "i added that adge"
-    IO.puts "i added that adge"
-    IO.puts "i added that adge"
-    IO.puts "i added that adge"
-    IO.puts "i added that adge"
-    send(pid, {:sequence_generated, "avideo.webm"})
     {:ok, pid}
   end
 end

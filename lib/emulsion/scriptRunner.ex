@@ -106,6 +106,7 @@ defmodule Emulsion.ScriptRunner do
   # calls the script that joins a sequence of frames into a video
   def execute_generate_sequential_video(frameBase, start_frame, number_of_frames, outputVideoName) do
     IO.puts "executing a seuqentaial"
+    IO.puts "executing a seuqentaial"
     File.rm(outputVideoName |> path_for_sequential_shell)
 
     args = [
