@@ -465,7 +465,8 @@ end
     # TODO: make a selector to choose whichtemplates to export
     templates = %{
       html_template: "core_trunk_template.html",
-      js_template: "core_script.js",
+      # js_template: "core_script.js",
+      js_template: "webgpu_core_script.js",
       playgraph_template: "core_playgraph.js"
     }
 

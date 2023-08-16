@@ -172,10 +172,51 @@ defmodule Emulsion.ScriptRunner do
             ffmpeg_params(),
             output_file
           ],
-          log: false
+          log: true
         )
     end
   end
+
+  def execute_generate_tween_tween_video(src_frame, dest_frame, tween_exp, output_file) do
+    src_frame = convert_if_needed(src_frame)
+    dest_frame = convert_if_needed(dest_frame)
+    cond do
+      !File.exists?(src_frame) ->
+        IO.puts " WARNING src frame does not exist: #{src_frame}"
+        Phoenix.PubSub.broadcast(
+          Emulsion.PubSub,
+          "generate_tween_tween_video",
+          {:does_not_exist, src_frame}
+        )
+
+      !File.exists?(dest_frame) ->
+        IO.puts " WARNING dest frame does not exist: #{dest_frame}"
+        Phoenix.PubSub.broadcast(
+          Emulsion.PubSub,
+          "generate_tween_tween_video",
+          {:does_not_exist, dest_frame}
+        )
+
+      true ->
+        Rambo.run(
+          "python.exe",
+          [
+            tween_video_script(),
+            # $2 is the tween exponent (# of frames to generate)
+            "#{tween_exp}",
+            # $3 is the source frame
+            src_frame,
+            # $4 is the destination frame
+            dest_frame,
+            # $5 is the ffmpeg parameters
+            ffmpeg_params(),
+            output_file
+          ],
+          log: true
+        )
+    end
+  end
+
 
   @doc """
   Calls the script that overlays two frames with a given opacity.

@@ -40,12 +40,20 @@ window.onload = async function () {
     updateUserInputDisplay();
 };
 
+function stopEventPropagation(event) {
+    event.stopPropagation();
+}
 
 class VideoPlayer {
     constructor() {
         this.videoA = document.getElementById('videoA');
         this.videoB = document.getElementById('videoB');
         this.blocked = false; // Initially, the player is not blocked
+        // Prevent both video elements from capturing or acting on the keydown events
+        this.videoA.addEventListener('keydown', stopEventPropagation);
+         this.videoB.addEventListener('keydown', stopEventPropagation);
+         this.videoA.style.pointerEvents = "none";
+         this.videoB.style.pointerEvents = "none";
     }
 
     setupEventHandlers() {
@@ -79,6 +87,7 @@ class VideoPlayer {
 
         // Play the next video
         nextVideo.src = nextVideoPath;
+        this.updateVideoNameDisplay(nextVideoPath);
 
         // Play the next video
         nextVideo.oncanplaythrough = () => {
@@ -103,5 +112,12 @@ class VideoPlayer {
         // Reset userInput to 'idle' after selecting an edge
         window.userInput = 'idle';
         updateUserInputDisplay();
+    }
+
+    updateVideoNameDisplay(videoPath) {
+    // Extract video name from the video path.
+    // For example, if videoPath is "/main/someVideo.mp4", the name would be "someVideo.mp4"
+    const videoName = videoPath.split('/').pop();
+    document.getElementById('currentVideoName').innerText = videoName;
     }
 }

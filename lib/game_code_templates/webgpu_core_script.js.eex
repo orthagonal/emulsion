@@ -1,0 +1,325 @@
+// current user input state:
+window.userInput = 'idle';
+
+// Function to update the display of the current user input
+function updateUserInputDisplay() {
+    document.getElementById('userInputDisplay').innerText = `User Input: ${window.userInput}`;
+}
+
+// WebGPU Variables
+let adapter;
+let device;
+let canvas;
+let context;
+let videoTexture;
+let pipeline;
+let bindGroup;
+
+const vertexShaderCode = `
+struct VertexOutput {
+    @builtin(position) Position : vec4<f32>,
+    @location(0) fragUV : vec2<f32>,
+}
+
+@vertex
+fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var pos = array<vec2<f32>, 4>(
+        vec2(-1.0, 1.0),   // top-left
+        vec2(-1.0, -1.0),  // bottom-left
+        vec2(1.0, 1.0),    // top-right
+        vec2(1.0, -1.0)    // bottom-right
+    );
+
+    const uv = array(
+        vec2(0.0, 1.0),  // top-left
+        vec2(0.0, 0.0),  // bottom-left
+        vec2(1.0, 1.0),  // top-right
+        vec2(1.0, 0.0)   // bottom-right
+    );
+
+    var output : VertexOutput;
+    output.Position = vec4<f32>(pos[vertexIndex], 0.0, 1.0);
+    output.fragUV = uv[vertexIndex];
+    return output;
+}
+`;
+
+const fragmentShaderCode = `
+@group(0) @binding(0) var mySampler: sampler;
+@group(0) @binding(1) var myTexture: texture_2d<f32>;
+
+@fragment
+fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
+    // return vec4(1.0, 0.0, 0.0, 1.0);
+    return textureSampleBaseClampToEdge(myTexture, mySampler, fragUV); 
+}
+`;
+
+async function initWebGPU() {
+    adapter = await navigator.gpu.requestAdapter();
+    device = await adapter.requestDevice();
+
+    canvas = document.getElementById("webgpuCanvas");
+    context = canvas.getContext("webgpu");
+
+    videoTexture = device.createTexture({
+        size: { width: 1920, height: 1080, depthOrArrayLayers: 1 },
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
+    });
+
+    const sampler = device.createSampler({
+        magFilter: 'linear',
+        minFilter: 'linear',
+    });
+
+    const vertexShaderModule = device.createShaderModule({
+        code: vertexShaderCode
+    });
+
+    const fragmentShaderModule = device.createShaderModule({
+        code: fragmentShaderCode
+    });
+
+    pipeline = device.createRenderPipeline({
+        layout: device.createPipelineLayout({
+            bindGroupLayouts: [device.createBindGroupLayout({
+                entries: [
+                    {
+                        binding: 0,
+                        visibility: GPUShaderStage.FRAGMENT,
+                        sampler: {
+                            type: 'filtering'
+                        }
+                    },
+                    {
+                        binding: 1,
+                        visibility: GPUShaderStage.FRAGMENT,
+                        texture: {
+                            sampleType: 'float'
+                        }
+                    }
+                ]
+            })]
+        }),
+        vertex: {
+            module: vertexShaderModule,
+            entryPoint: 'main'
+        },
+        fragment: {
+            module: fragmentShaderModule,
+            entryPoint: 'main',
+            targets: [{
+                format: 'bgra8unorm'
+            }]
+        },
+        primitive: {
+            topology: 'triangle-strip',
+            stripIndexFormat: 'uint32'
+        },
+    });
+
+    bindGroup = device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+            {
+                binding: 0,
+                resource: sampler
+            },
+            {
+                binding: 1,
+                resource: videoTexture.createView()
+            }
+        ]
+    });
+}
+
+function updateTextureFromVideo(videoElement) {
+    const offscreenCanvas = new OffscreenCanvas(1920, 1080);
+    const ctx = offscreenCanvas.getContext('2d');
+    ctx.drawImage(videoElement, 0, 0, 1920, 1080);
+
+    const imageData = ctx.getImageData(0, 0, 1920, 1080);
+    device.queue.writeTexture(
+        { texture: videoTexture },
+        imageData.data,
+        {                                  // Data layout
+            offset: 0,
+            bytesPerRow: 7680,
+            rowsPerImage: 1080
+        },
+        { width: 1920, height: 1080, depthOrArrayLayers: 1 }  // Size
+    );
+}
+
+async function renderFrame() {
+    const swapChainFormat = 'bgra8unorm';
+    context.configure({
+        device: device,
+        format: swapChainFormat
+    });
+
+    const currentTexture = context.getCurrentTexture();
+    const renderPassDescriptor = {
+        colorAttachments: [{
+            view: currentTexture.createView(),
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            loadOp: 'clear',
+            storeOp: 'store',
+            loadValue: 'clear',
+        }],
+    };
+
+    const commandEncoder = device.createCommandEncoder();
+    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+    passEncoder.setPipeline(pipeline);
+    passEncoder.setBindGroup(0, bindGroup);
+    passEncoder.draw(4, 1, 0, 0);
+    passEncoder.end(); 
+    device.queue.submit([commandEncoder.finish()]);
+}
+
+function renderLoop() {
+    // Determine the video currently playing
+    let currentVideo;
+    if (window.VideoPlayer.videoA.currentTime > 0 && !window.VideoPlayer.videoA.paused && !window.VideoPlayer.videoA.ended) {
+        currentVideo = window.VideoPlayer.videoA;
+    } else if (window.VideoPlayer.videoB.currentTime > 0 && !window.VideoPlayer.videoB.paused && !window.VideoPlayer.videoB.ended) {
+        currentVideo = window.VideoPlayer.videoB;
+    }
+
+    // If there's a current video, update the texture with its content
+    if (currentVideo) {
+        updateTextureFromVideo(currentVideo);
+    }
+    
+    // Render to the canvas using WebGPU
+    renderFrame();
+    
+    // Call this function continuously to keep updating
+    requestAnimationFrame(renderLoop);
+}
+
+window.onload = async function () {
+    await initWebGPU();
+    const playgraph = window.Playgraph.getPlaygraph('main');
+    const data = playgraph;
+    window.playgraph = data;
+
+    window.VideoPlayer = new VideoPlayer();
+    window.VideoPlayer.setupEventHandlers();
+
+    window.VideoPlayer.currentNodeIndex = data.nodes.length - 1;
+
+    const firstNode = data.nodes[data.nodes.length - 1];
+    const firstVideo = `/main/${firstNode.edges[0].id}`; // Assuming the main sub-folder contains the video files
+
+    const videoA = document.getElementById("videoA");
+    videoA.src = firstVideo;
+
+    const playOnInteraction = function () {
+        renderLoop();
+        if (videoA.readyState > 3) {
+            videoA.play();
+            // Preload next video
+            const nextVideoPath = window.VideoPlayer.getNextVideoPathAndNode(videoA);
+            const videoB = document.getElementById('videoB');
+            videoB.src = nextVideoPath;
+            videoB.load();
+            // Remove this listener since the video has started
+            document.removeEventListener('click', playOnInteraction);
+        }
+    };
+  
+    // Add listeners for various user interactions
+    document.addEventListener('click', playOnInteraction);
+
+    document.addEventListener('keydown', (event) => {
+        window.userInput = 'next';
+        // Update the display when the page loads
+    });
+
+    // Initialize WebGPU rendering here or set up a rendering loop
+    renderFrame();
+};
+
+class VideoPlayer {
+    constructor() {
+        this.videoA = document.getElementById('videoA');
+        this.videoB = document.getElementById('videoB');
+        this.blocked = false; // Initially, the player is not blocked
+        // Prevent both video elements from capturing or acting on the keydown events
+        // this.videoA.addEventListener('keydown', stopEventPropagation);
+        //  this.videoB.addEventListener('keydown', stopEventPropagation);
+         this.videoA.style.pointerEvents = "none";
+         this.videoB.style.pointerEvents = "none";
+    }
+
+    setupEventHandlers() {
+        this.videoA.onended = () => this.switchVideos(this.videoA, this.videoB);
+        this.videoB.onended = () => this.switchVideos(this.videoB, this.videoA);
+    }
+
+    getNextVideoPathAndNode(currentVideo) {
+        const currentNode = window.playgraph.nodes[this.currentNodeIndex];
+        const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
+        let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
+    
+        // Select the next edge based on the global userInput variable
+        const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(window.userInput));
+        if (nextEdges.length > 0) {
+            nextEdgeIndex = currentNode.edges.indexOf(nextEdges[0]);
+        }
+    
+        const nextVideoPath = `/main/${currentNode.edges[nextEdgeIndex].id}`;
+    
+        // Update the current node index if we transitioned to a different node
+        const nextNodeId = currentNode.edges[nextEdgeIndex].to;
+        const nextNodeIndex = window.playgraph.nodes.findIndex(node => node.id === nextNodeId);
+        if (nextNodeIndex !== -1) {
+            this.currentNodeIndex = nextNodeIndex;
+        }
+    
+        return nextVideoPath;
+    }
+    
+    switchVideos(currentVideo, nextVideo) {
+        if (this.blocked) return;
+    
+        const nextVideoPath = this.getNextVideoPathAndNode(currentVideo);
+    
+        this.updateVideoNameDisplay(nextVideoPath);
+    
+        // Play the next video
+        nextVideo.src = nextVideoPath;
+        nextVideo.oncanplaythrough = () => {
+            nextVideo.play();
+    
+            // If the previous video was in fullscreen, make sure the next video also enters fullscreen
+            if (document.fullscreenElement) {
+                nextVideo.requestFullscreen().catch(err => {
+                    console.error(`Error attempting to enable fullscreen mode: ${err.message} (${err.name})`);
+                });
+            }
+    
+            // Determine the subsequent video and preload it
+            const subsequentVideo = (nextVideo === this.videoA) ? this.videoB : this.videoA;
+            subsequentVideo.src = currentVideo.src; // Set the subsequent video's src to the current video's src
+            subsequentVideo.load();
+    
+            // Remove the oncanplaythrough event handler
+            nextVideo.oncanplaythrough = null;
+        };
+    
+        // Reset userInput to 'idle' after selecting an edge
+        window.userInput = 'idle';
+        updateUserInputDisplay();
+    }
+    
+    updateVideoNameDisplay(videoPath) {
+        // Extract video name from the video path.
+        // For example, if videoPath is "/main/someVideo.mp4", the name would be "someVideo.mp4"
+        const videoName = videoPath.split('/').pop();
+        document.getElementById('currentVideoName').innerText = videoName;
+    }
+}

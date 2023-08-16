@@ -38,7 +38,7 @@ warnings.filterwarnings("ignore")
 def printMem():
     gc.collect()
     torch.cuda.empty_cache()
-    print(torch.cuda.memory_summary())
+    # print(torch.cuda.memory_summary())
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"device is {device}")
@@ -104,7 +104,7 @@ if args.ratio:
         tmp_img0 = img0
         tmp_img1 = img1
         for inference_cycle in range(args.rmaxcycles):
-            print(inference_cycle)
+            # print(inference_cycle)
             middle = model.inference(tmp_img0, tmp_img1)
             middle_ratio = ( img0_ratio + img1_ratio ) / 2
             if args.ratio - (args.rthreshold / 2) <= middle_ratio <= args.ratio + (args.rthreshold / 2):
@@ -122,9 +122,7 @@ else:
     for i in range(args.exp):
         tmp = []
         for j in range(len(img_list) - 1):
-            print(j)
             printMem()
-            print(img_list)
             mid = model.inference(img_list[j], img_list[j + 1])
             tmp.append(img_list[j])
             tmp.append(mid)
