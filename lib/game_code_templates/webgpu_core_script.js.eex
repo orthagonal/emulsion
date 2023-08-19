@@ -1,10 +1,7 @@
-// current user input state:
-window.userInput = 'idle';
-
-// Function to update the display of the current user input
-function updateUserInputDisplay() {
-    document.getElementById('userInputDisplay').innerText = `User Input: ${window.userInput}`;
-}
+const screenWidth = 1920.0;
+const screenHeight = 1080.0;
+const cursorWidth = 64.0;
+const cursorHeight = 64.0;
 
 // WebGPU Variables
 let adapter;
@@ -14,6 +11,16 @@ let context;
 let videoTexture;
 let pipeline;
 let bindGroup;
+let cursorVideoTexture;
+let mousePositionBuffer;
+
+// current user input state:
+window.userInput = 'idle';
+// Function to update the display of the current user input
+function updateUserInputDisplay() {
+    document.getElementById('userInputDisplay').innerText = `User Input: ${window.userInput}`;
+}
+
 
 const vertexShaderCode = `
 struct VertexOutput {
@@ -31,10 +38,10 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
     );
 
     const uv = array(
-        vec2(0.0, 1.0),  // top-left
-        vec2(0.0, 0.0),  // bottom-left
-        vec2(1.0, 1.0),  // top-right
-        vec2(1.0, 0.0)   // bottom-right
+        vec2(0.0, 0.0),  // top-left (y-coordinate flipped)
+        vec2(0.0, 1.0),  // bottom-left (y-coordinate flipped)
+        vec2(1.0, 0.0),  // top-right (y-coordinate flipped)
+        vec2(1.0, 1.0)   // bottom-right (y-coordinate flipped)
     );
 
     var output : VertexOutput;
@@ -45,25 +52,84 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 `;
 
 const fragmentShaderCode = `
+struct MouseUniform {
+    mousePosition: vec2<f32>
+};
+
+struct Constants {
+    screenWidth: f32,
+    screenHeight: f32,
+    cursorWidth: f32,
+    cursorHeight: f32
+};
+
 @group(0) @binding(0) var mySampler: sampler;
 @group(0) @binding(1) var myTexture: texture_2d<f32>;
-
+@group(0) @binding(2) var smallSampler: sampler;
+@group(0) @binding(3) var smallTexture: texture_2d<f32>;
+@group(0) @binding(4) var<uniform> mousePosition: MouseUniform;
+@group(0) @binding(5) var<uniform> constants: Constants;
 @fragment
 fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
-    // return vec4(1.0, 0.0, 0.0, 1.0);
-    return textureSampleBaseClampToEdge(myTexture, mySampler, fragUV); 
+    // sample the main texture
+    var mainColor = textureSampleBaseClampToEdge(myTexture, mySampler, fragUV);
+
+    // calculate half width and half height for the cursor
+    var halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
+    var halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
+
+    // calculate the boundaries for the cursor based on mouse position
+    var leftBoundary = mousePosition.mousePosition.x - halfCursorWidth;
+    var rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
+    var yOffset = 1.0 * halfCursorHeight;
+    var bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight - yOffset;
+    var topBoundary = mousePosition.mousePosition.y + halfCursorHeight - yOffset; 
+
+    var isWithinSmallTexture = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
+                               fragUV.y > bottomBoundary && fragUV.y < topBoundary;
+
+    if (isWithinSmallTexture) {
+        // adjust the fragUV to sample correctly from the smaller texture
+        var adjustedUV = vec2<f32>(
+            (fragUV.x - leftBoundary) / (2.0 * halfCursorWidth), 
+            1.0 - (fragUV.y - bottomBoundary) / (2.0 * halfCursorHeight)  // flip the y-coordinate here
+        );
+        
+        var smallColor = textureSampleBaseClampToEdge(smallTexture, smallSampler, adjustedUV);
+        return smallColor;
+    }
+
+    return mainColor;
 }
+
 `;
 
 async function initWebGPU() {
     adapter = await navigator.gpu.requestAdapter();
     device = await adapter.requestDevice();
-
+    
     canvas = document.getElementById("webgpuCanvas");
     context = canvas.getContext("webgpu");
 
+    mousePositionBuffer = device.createBuffer({
+        size: 8,  // 2 float32 values: x and y
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    const constantsBuffer = device.createBuffer({
+        size: 4 * 4,  // 4 constants of 4 bytes (float) each
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    
+    // Write values to the buffer
+    device.queue.writeBuffer(
+        constantsBuffer,
+        0,
+        new Float32Array([screenWidth, screenHeight, cursorWidth, cursorHeight]).buffer
+    );
+    
     videoTexture = device.createTexture({
-        size: { width: 1920, height: 1080, depthOrArrayLayers: 1 },
+        size: { width: screenWidth  , height: screenHeight, depthOrArrayLayers: 1 },
         format: 'rgba8unorm',
         usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
     });
@@ -98,6 +164,18 @@ async function initWebGPU() {
                         texture: {
                             sampleType: 'float'
                         }
+                    },
+                    { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+                    { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+                    {
+                        binding: 4,  // Assuming bindings 0-3 are for your samplers and textures
+                        visibility: GPUShaderStage.FRAGMENT,
+                        buffer: { type: 'uniform' }
+                    },
+                    {
+                        binding: 5,
+                        visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX,
+                        buffer: { type: 'uniform' }
                     }
                 ]
             })]
@@ -119,6 +197,12 @@ async function initWebGPU() {
         },
     });
 
+    cursorVideoTexture = device.createTexture({
+        size: { width: 64, height: 64, depthOrArrayLayers: 1 },
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
+    });
+    
     bindGroup = device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -129,30 +213,53 @@ async function initWebGPU() {
             {
                 binding: 1,
                 resource: videoTexture.createView()
-            }
+            },
+            {
+                binding: 2,
+                resource: sampler  // reusing the same sampler for the small texture
+            },
+            {
+                binding: 3,
+                resource: cursorVideoTexture.createView()
+            },
+            {
+                binding: 4,
+                resource: {
+                    buffer: mousePositionBuffer,
+                }
+            },
+            {
+                binding: 5,
+                resource: {
+                    buffer: constantsBuffer,
+                },
+            },
         ]
     });
 }
 
 function updateTextureFromVideo(videoElement) {
-    const offscreenCanvas = new OffscreenCanvas(1920, 1080);
+    const offscreenCanvas = new OffscreenCanvas(screenWidth , screenHeight);
     const ctx = offscreenCanvas.getContext('2d');
-    ctx.drawImage(videoElement, 0, 0, 1920, 1080);
+    ctx.drawImage(videoElement, 0, 0, screenWidth   , screenHeight);
 
-    const imageData = ctx.getImageData(0, 0, 1920, 1080);
+    const imageData = ctx.getImageData(0, 0, screenWidth    , screenHeight);
     device.queue.writeTexture(
         { texture: videoTexture },
         imageData.data,
         {                                  // Data layout
             offset: 0,
             bytesPerRow: 7680,
-            rowsPerImage: 1080
+            rowsPerImage: screenHeight
         },
-        { width: 1920, height: 1080, depthOrArrayLayers: 1 }  // Size
+        { width: screenWidth    , height: screenHeight, depthOrArrayLayers: 1 }  // Size
     );
 }
 
 async function renderFrame() {
+    let mouseX = 0;
+    let mouseY = 0;
+    
     const swapChainFormat = 'bgra8unorm';
     context.configure({
         device: device,
@@ -170,6 +277,7 @@ async function renderFrame() {
         }],
     };
 
+
     const commandEncoder = device.createCommandEncoder();
     const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
     passEncoder.setPipeline(pipeline);
@@ -182,10 +290,10 @@ async function renderFrame() {
 function renderLoop() {
     // Determine the video currently playing
     let currentVideo;
-    if (window.VideoPlayer.videoA.currentTime > 0 && !window.VideoPlayer.videoA.paused && !window.VideoPlayer.videoA.ended) {
-        currentVideo = window.VideoPlayer.videoA;
-    } else if (window.VideoPlayer.videoB.currentTime > 0 && !window.VideoPlayer.videoB.paused && !window.VideoPlayer.videoB.ended) {
-        currentVideo = window.VideoPlayer.videoB;
+    if (window.mainVideoPlayer.videoA.currentTime > 0 && !window.mainVideoPlayer.videoA.paused && !window.mainVideoPlayer.videoA.ended) {
+        currentVideo = window.mainVideoPlayer.videoA;
+    } else if (window.mainVideoPlayer.videoB.currentTime > 0 && !window.mainVideoPlayer.videoB.paused && !window.mainVideoPlayer.videoB.ended) {
+        currentVideo = window.mainVideoPlayer.videoB;
     }
 
     // If there's a current video, update the texture with its content
@@ -202,37 +310,45 @@ function renderLoop() {
 
 window.onload = async function () {
     await initWebGPU();
+
+    canvas.addEventListener('mousemove', event => {
+        // Normalize the mouse position
+        let x = event.clientX / canvas.width;
+        let y = event.clientY / canvas.height; 
+    
+        // Update the buffer
+        const mousePositionArray = new Float32Array([x, y]);
+        device.queue.writeBuffer(
+            mousePositionBuffer,
+            0,
+            mousePositionArray.buffer
+        );
+    });
+    
     const playgraph = window.Playgraph.getPlaygraph('main');
     const data = playgraph;
     window.playgraph = data;
 
-    window.VideoPlayer = new VideoPlayer();
-    window.VideoPlayer.setupEventHandlers();
+    window.mainVideoPlayer = new VideoPlayer(data);
+    window.mainVideoPlayer.currentNodeIndex = data.nodes.length - 1;   
 
-    window.VideoPlayer.currentNodeIndex = data.nodes.length - 1;
+    // needs to be cursorPlaygraph
+    // window.cursorVideoPlayer = new VideoPlayer(data);
+    // window.cursorVideoPlayer.currentNodeIndex = data.nodes.length - 1;
 
-    const firstNode = data.nodes[data.nodes.length - 1];
-    const firstVideo = `/main/${firstNode.edges[0].id}`; // Assuming the main sub-folder contains the video files
-
-    const videoA = document.getElementById("videoA");
-    videoA.src = firstVideo;
-
-    const playOnInteraction = function () {
+    // Add listeners for various user interactions
+    document.addEventListener('click',  function playOnInteraction() {
         renderLoop();
-        if (videoA.readyState > 3) {
-            videoA.play();
+        if (window.mainVideoPlayer.videoA.readyState > 3) {
+            window.mainVideoPlayer.videoA.play();
             // Preload next video
-            const nextVideoPath = window.VideoPlayer.getNextVideoPathAndNode(videoA);
-            const videoB = document.getElementById('videoB');
-            videoB.src = nextVideoPath;
-            videoB.load();
+            const nextVideoPath = window.mainVideoPlayer.getNextVideoPathAndNode(window.mainVideoPlayer.videoA);
+            window.mainVideoPlayer.videoB.src = nextVideoPath;
+            window.mainVideoPlayer.videoB.load();
             // Remove this listener since the video has started
             document.removeEventListener('click', playOnInteraction);
         }
-    };
-  
-    // Add listeners for various user interactions
-    document.addEventListener('click', playOnInteraction);
+    });
 
     document.addEventListener('keydown', (event) => {
         window.userInput = 'next';
@@ -241,27 +357,32 @@ window.onload = async function () {
 
     // Initialize WebGPU rendering here or set up a rendering loop
     renderFrame();
+    
 };
 
-class VideoPlayer {
-    constructor() {
-        this.videoA = document.getElementById('videoA');
-        this.videoB = document.getElementById('videoB');
-        this.blocked = false; // Initially, the player is not blocked
-        // Prevent both video elements from capturing or acting on the keydown events
-        // this.videoA.addEventListener('keydown', stopEventPropagation);
-        //  this.videoB.addEventListener('keydown', stopEventPropagation);
-         this.videoA.style.pointerEvents = "none";
-         this.videoB.style.pointerEvents = "none";
-    }
 
-    setupEventHandlers() {
+class VideoPlayer {
+    constructor(playgraph) {
+        this.playgraph = playgraph;
+        this.blocked = false; // Initially, the player is not blocked
+        this.videoA = this.createVideoElement();
+        this.videoB = this.createVideoElement();
         this.videoA.onended = () => this.switchVideos(this.videoA, this.videoB);
         this.videoB.onended = () => this.switchVideos(this.videoB, this.videoA);
+        const firstNode = playgraph.nodes[playgraph.nodes.length - 1];
+        const firstVideo = `/main/${firstNode.edges[0].id}`; // Assuming the main sub-folder contains the video files
+        this.videoA.src = firstVideo;
+    }
+
+    createVideoElement() {
+        const videoElem = document.createElement('video');
+        videoElem.style.pointerEvents = "none";
+        // document.body.appendChild(videoElem); // This is needed to make sure the video elements are in the DOM. If not needed, you can remove this line.
+        return videoElem;
     }
 
     getNextVideoPathAndNode(currentVideo) {
-        const currentNode = window.playgraph.nodes[this.currentNodeIndex];
+        const currentNode =this.playgraph.nodes[this.currentNodeIndex];
         const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
         let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
     
@@ -275,7 +396,7 @@ class VideoPlayer {
     
         // Update the current node index if we transitioned to a different node
         const nextNodeId = currentNode.edges[nextEdgeIndex].to;
-        const nextNodeIndex = window.playgraph.nodes.findIndex(node => node.id === nextNodeId);
+        const nextNodeIndex = this.playgraph.nodes.findIndex(node => node.id === nextNodeId);
         if (nextNodeIndex !== -1) {
             this.currentNodeIndex = nextNodeIndex;
         }
