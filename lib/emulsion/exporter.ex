@@ -31,29 +31,40 @@ defmodule Emulsion.Exporter do
     {:reply, :ok, Map.put(state, :directory, directory)}
   end
 
-  def handle_call({:export_playgraph, playgraph, templates}, _from, state) do
+  def handle_call({:export_playgraph, playgraph, templates},  from, state) do
+    handle_call({:export_playgraph, playgraph, templates, ["lib/game_code_templates/cursor.playgraph"]}, from, state)
+  end
+
+  def handle_call({:export_playgraph, playgraph, templates, additional_playgraphs}, _from, state) do
     File.mkdir_p!("#{state.directory}/main")
 
-    normalized_playgraph = normalize_playgraph_paths(playgraph, "#{state.directory}/main")
+    normalized_playgraphs = %{
+      "main" => normalize_playgraph_paths(playgraph, "#{state.directory}/main")
+    }
 
-    string_playgraph = Jason.encode!(normalized_playgraph)
+    # Process additional playgraphs
+    normalized_playgraphs = for playgraph_path <- additional_playgraphs do
+      playgraph_name = Path.basename(playgraph_path, ".playgraph")
+      raw_additional_playgraph = File.read!(playgraph_path)
+      additional_playgraph = Jason.decode!(raw_additional_playgraph)
+      normalized_playgraphs = Map.put(normalized_playgraphs, playgraph_name, normalize_playgraph_paths(additional_playgraph, "#{state.directory}/#{playgraph_name}"))
+      File.mkdir_p!("#{state.directory}/#{playgraph_name}")
+      normalized_playgraphs
+    end
+
+    string_playgraphs = Jason.encode!(normalized_playgraphs)
 
     # additional templates (optional)
-    if (Map.has_key?(templates, :playgraph_template)) do
+    if Map.has_key?(templates, :playgraph_template) do
       playgraph_template = templates.playgraph_template
-      playgraph_content = do_export_template(playgraph_template, %{playgraph: string_playgraph, playgraph_name: "main"})
+      playgraph_content = do_export_template(playgraph_template, %{playgraph: string_playgraphs, playgraph_name: "one"})
       playgraph_path = Path.join([state.directory, "playgraph.js"])
       File.write!(playgraph_path, playgraph_content)
     end
 
-    File.write!("#{state.directory}/playgraph.playgraph", string_playgraph)
-    Enum.each(normalized_playgraph["nodes"], fn node ->
-      Enum.each(node["edges"], fn edge ->
-        File.cp!(convert_if_needed(edge["path"]), "#{state.directory}/main/#{Path.basename(edge["path"])}")
-      end)
-    end)
+    File.write!("#{state.directory}/playgraph.playgraph", string_playgraphs)
 
-    {:reply, normalized_playgraph, state}
+    {:reply, normalized_playgraphs, state}
   end
 
   defp convert_if_needed(path) do

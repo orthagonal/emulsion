@@ -397,7 +397,7 @@ defmodule EmulsionWeb.FramePickerControllerLive do
 
     # Do any further processing if needed, and update the socket:
     {:noreply, socket}
-end
+  end
 
   def handle_event("idle_around_frame", %{"src_frame" => src_frame, "range" => range}, socket) do
     IO.puts("*********************************")
@@ -474,5 +474,35 @@ end
     Emulsion.Exporter.export_all(title, playgraph, templates, assets_path)
 
     {:noreply, assign(socket, assets_path: assets_path, title: title)}
+  end
+
+  def handle_event("regenerate_video", %{"from" => from, "to" => to, "edge_type" => edge_type}, socket) do
+    case edge_type do
+      "tween" ->
+        Emulsion.Video.generate_tween_and_video(from, to, socket.assigns.tween_multiplier, true)
+      "sequence" ->
+        IO.puts "JJJJJ"
+        IO.puts "JJJJJ"
+        IO.puts "JJJJJ"
+        # regenerate_sequence(from, to)
+      _ ->
+          IO.puts "I ODONT KNOW WHAT TO DO"
+          IO.puts "I ODONT KNOW WHAT TO DO"
+          IO.puts "I ODONT KNOW WHAT TO DO"
+          IO.puts "I ODONT KNOW WHAT TO DO"
+          IO.puts "I ODONT KNOW WHAT TO DO"
+        # Handle other edge types or an error scenario
+        {:noreply, socket}
+    end
+    {:noreply, socket}
+  end
+
+  def handle_event("regenerate_video", %{"edge_id" => edge_id, "edge_type" => "sequence"}, socket) do
+    # call the regenerate_sequences function
+    # IO.puts "this is a sequence regenerate"
+    # IO.puts "this is a sequence regenerate"
+    # IO.inspect socket.assigns
+    # Emulsion.Video.regenerate_sequences(%{edges: [%{id: edge_id}]})
+    {:noreply, socket}
   end
 end

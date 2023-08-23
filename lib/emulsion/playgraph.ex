@@ -298,7 +298,6 @@ def get_playgraph() do
     {:reply, :ok, Map.put(state, "nodes", nodes)}
   end
 
-
   def tag_edge(edge_id, tag) when is_list(tag) do
     Enum.map(tag, fn tag -> tag_edge(edge_id, tag) end)
   end

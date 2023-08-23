@@ -111,6 +111,7 @@ Hooks.VisNetwork = {
     return new Network(container, diagram, options);
   },
 };
+
 Hooks.VideoPlayer = {
   mounted() {
     window.VideoPlayer = this; // Expose this object to the global scope
@@ -287,6 +288,7 @@ Hooks.ContextPanel = {
       <p>Edge ID: ${edge.id}</p>
       <p>Edge From: ${edge.from}</p>
       <p>Edge To: ${edge.to}</p>
+      <button data-action="regenerate-video">Regenerate Video</button>
       <button data-action="goto">Goto</button>
       <button data-action="delete">Delete Edge</button>
       <div>
@@ -311,6 +313,20 @@ Hooks.ContextPanel = {
     let deleteButton = document.querySelector('button[data-action="delete"]');
     deleteButton.addEventListener('click', function () {
       self.pushEvent("delete_edge", { edge_id: edge.id });
+    });
+
+    function determineEdgeType(edgeId) {
+      if (edgeId.includes("_to_")) {
+        return "tween";
+      } else if (edgeId.includes("_thru_")) {
+        return "sequence";
+      }
+      return null;  // or some other default value
+    }
+        
+    let regenerateButton = document.querySelector('button[data-action="regenerate-video"]');
+    regenerateButton.addEventListener('click', function () {
+      self.pushEvent("regenerate_video", { from: edge.from, to: edge.to, edge_type: determineEdgeType(edge.id) });
     });
   },
 

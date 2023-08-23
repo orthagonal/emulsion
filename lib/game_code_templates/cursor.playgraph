@@ -1,0 +1,31 @@
+{
+  "nodes": [
+    {
+      "edges": [
+        {
+          "destination": "cursor_loop",
+          "from": "cursor_loop",
+          "tags": [
+            "idle"
+          ],
+          "id": "lens_flare_loop.webm",
+          "path": "lensflareloop",
+          "to": "lensflareloop"
+        },
+        {
+          "destination": "blood_transition",
+          "from": "blood_transition",
+          "tags": [
+            "next"
+          ],
+          "id": "blood_transition.webm",
+          "path": "bloodtransition",
+          "to": "bloodtransition"
+        }
+      ],
+      "id": "lens_flare_loop",
+      "label": "lens_flare_loop",
+      "name": "e:/emulsion_workspace/candidate_good/frames/img_2211.png"
+    }
+  ]
+}

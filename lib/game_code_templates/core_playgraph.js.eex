@@ -3,8 +3,10 @@ window.Playgraph = {
     <%= playgraph_name %>:  <%=playgraph %>,
   },
   getPlaygraph(name) {
-    if (window.Playgraph.playgraphs[name]) {
-      return window.Playgraph.playgraphs[name];
+    try {
+      return window.Playgraph.playgraphs[name][0];
+    } catch(exc) {
+      alert("Playgraph not found: " + name);
     }
   }
 };

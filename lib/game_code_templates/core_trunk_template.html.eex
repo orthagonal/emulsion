@@ -5,12 +5,21 @@
     <script data-trunk src="./playgraph.js">   </script>
     <link data-trunk rel="copy-dir" href="../src/trailer/main" > </link>
     <title> <%= game_title %> </title>
+        <style>
+      body {
+        cursor: none;
+      }
+      #webgpuCanvas {
+        width: 1920;
+        height: 1080;
+        background-color: black;
+        border: 1px solid green;
+      }
+    </style>
   </head>
   <body>
     <div id="videoNameDisplay">Video Name: <span id="currentVideoName">Loading...</span></div>
     <div id="userInputDisplay">Loading...</div>
-    <canvas id="webgpuCanvas" width="640" height="480" style="display: none"></canvas>
-    <video id="videoA"></video>
-    <video id="videoB" style="display: none"></video>
+    <canvas id="webgpuCanvas" width="1920" height="1080"></canvas>
   </body>
 </html>

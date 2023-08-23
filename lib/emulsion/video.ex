@@ -58,7 +58,7 @@ defmodule Emulsion.Video do
 
     # Construct new filename
     "#{base_name}_#{padded_frame_number}.#{extension}"
-end
+  end
 
   def handle_call({:handle_upload, image, working_root}, _from, state) do
     # 1. Get the paths
@@ -148,7 +148,7 @@ end
     dest_framebase = Path.basename(dest_frame, Path.extname(dest_frame))
     output_file = Path.join(output_dir, "#{src_framebase}_to_#{dest_framebase}.#{@videoFormat}")
     # if the tween already exists then notify and just return the file name:
-    if force_build == "true" do
+    if force_build == "true" || force_build == true do
       # Delete the output file if it exists
       if File.exists?(output_file) do
         File.rm!(output_file)
@@ -206,4 +206,36 @@ end
     send(pid, {:sequence_generated, video_name})
     outputVideoName
   end
+
+#   # Processes all the tweens in the playgraph
+  def regenerate_tweens(%{edges: edges}, tween_multiplier) when is_list(edges) do
+  Enum.each(edges, fn edge ->
+    maybe_generate_tween(edge, tween_multiplier)
+  end)
+  end
+
+#   # Processes all the sequences in the playgraph
+  def regenerate_sequences(%{edges: edges}) when is_list(edges) do
+    Enum.each(edges, fn edge ->
+      maybe_generate_sequence(edge)
+    end)
+  end
+
+  defp maybe_generate_tween(%{id: video_id, from: from, to: to} = edge, tween_multiplier) do
+    if String.contains?(video_id, "_to_") do
+      Video.generate_tween_and_video(from, to, tween_multiplier, true)
+    else
+      :noop
+    end
+  end
+
+  defp maybe_generate_sequence(%{id: video_id, from: from, to: to} = edge) do
+    if String.contains?(video_id, "_thru_") do
+      Video.generate_sequence(from, to)
+    else
+      :noop
+    end
+  end
+
+  defp maybe_generate_sequence(_), do: :noop
 end

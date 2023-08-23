@@ -3,23 +3,27 @@ const screenHeight = 1080.0;
 const cursorWidth = 64.0;
 const cursorHeight = 64.0;
 
+
+// current user input state:
+window.userInput = 'idle';
+window.cursorState = 'idle';
+
+// Function to update the display of the current user input
+function updateUserInputDisplay() {
+    document.getElementById('userInputDisplay').innerText = `User Input: ${window.userInput}`;
+}
+
 // WebGPU Variables
 let adapter;
 let device;
 let canvas;
 let context;
-let videoTexture;
 let pipeline;
 let bindGroup;
+let videoTexture;
 let cursorVideoTexture;
 let mousePositionBuffer;
 
-// current user input state:
-window.userInput = 'idle';
-// Function to update the display of the current user input
-function updateUserInputDisplay() {
-    document.getElementById('userInputDisplay').innerText = `User Input: ${window.userInput}`;
-}
 
 
 const vertexShaderCode = `
@@ -96,19 +100,31 @@ fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
         );
         
         var smallColor = textureSampleBaseClampToEdge(smallTexture, smallSampler, adjustedUV);
-        return smallColor;
+
+        // Check for alpha or absolute black pixel
+        if (smallColor.a == 0.0 || (smallColor.r == 0.0 && smallColor.g == 0.0 && smallColor.b == 0.0)) {
+            return mainColor;
+        } else {
+            return smallColor;
+        }
     }
 
     return mainColor;
 }
-
 `;
+
 
 async function initWebGPU() {
     adapter = await navigator.gpu.requestAdapter();
     device = await adapter.requestDevice();
     
     canvas = document.getElementById("webgpuCanvas");
+    let dpr = window.devicePixelRatio;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    canvas.style.width = `${window.innerWidth}px`;
+    canvas.style.height = `${window.innerHeight}px`;
+
     context = canvas.getContext("webgpu");
 
     mousePositionBuffer = device.createBuffer({
@@ -238,21 +254,22 @@ async function initWebGPU() {
     });
 }
 
-function updateTextureFromVideo(videoElement) {
-    const offscreenCanvas = new OffscreenCanvas(screenWidth , screenHeight);
+function updateTextureFromVideo(videoElement, targetTexture, dimensions) {
+    const { width, height } = dimensions;
+    const offscreenCanvas = new OffscreenCanvas(width, height);
     const ctx = offscreenCanvas.getContext('2d');
-    ctx.drawImage(videoElement, 0, 0, screenWidth   , screenHeight);
+    ctx.drawImage(videoElement, 0, 0, width, height);
 
-    const imageData = ctx.getImageData(0, 0, screenWidth    , screenHeight);
+    const imageData = ctx.getImageData(0, 0, width, height);
     device.queue.writeTexture(
-        { texture: videoTexture },
+        { texture: targetTexture },
         imageData.data,
         {                                  // Data layout
             offset: 0,
-            bytesPerRow: 7680,
-            rowsPerImage: screenHeight
+            bytesPerRow: 4 * width,       // Updated to use width, assuming each pixel is 4 bytes (RGBA)
+            rowsPerImage: height
         },
-        { width: screenWidth    , height: screenHeight, depthOrArrayLayers: 1 }  // Size
+        { width: width, height: height, depthOrArrayLayers: 1 }  // Size
     );
 }
 
@@ -289,17 +306,30 @@ async function renderFrame() {
 
 function renderLoop() {
     // Determine the video currently playing
-    let currentVideo;
-    if (window.mainVideoPlayer.videoA.currentTime > 0 && !window.mainVideoPlayer.videoA.paused && !window.mainVideoPlayer.videoA.ended) {
-        currentVideo = window.mainVideoPlayer.videoA;
-    } else if (window.mainVideoPlayer.videoB.currentTime > 0 && !window.mainVideoPlayer.videoB.paused && !window.mainVideoPlayer.videoB.ended) {
-        currentVideo = window.mainVideoPlayer.videoB;
-    }
+  // Main video player logic
+let currentMainVideo;
+if (window.mainVideoPlayer.videoA.currentTime > 0 && !window.mainVideoPlayer.videoA.paused && !window.mainVideoPlayer.videoA.ended) {
+    currentMainVideo = window.mainVideoPlayer.videoA;
+} else if (window.mainVideoPlayer.videoB.currentTime > 0 && !window.mainVideoPlayer.videoB.paused && !window.mainVideoPlayer.videoB.ended) {
+    currentMainVideo = window.mainVideoPlayer.videoB;
+}
 
-    // If there's a current video, update the texture with its content
-    if (currentVideo) {
-        updateTextureFromVideo(currentVideo);
-    }
+// Cursor video player logic
+let currentCursorVideo;
+if (window.cursorVideoPlayer.videoA.currentTime > 0 && !window.cursorVideoPlayer.videoA.paused && !window.cursorVideoPlayer.videoA.ended) {
+    currentCursorVideo = window.cursorVideoPlayer.videoA;
+} else if (window.cursorVideoPlayer.videoB.currentTime > 0 && !window.cursorVideoPlayer.videoB.paused && !window.cursorVideoPlayer.videoB.ended) {
+    currentCursorVideo = window.cursorVideoPlayer.videoB;
+}
+
+// Update textures
+if (currentMainVideo) {
+    updateTextureFromVideo(currentMainVideo, videoTexture, { width: screenWidth, height: screenHeight });
+}
+if (currentCursorVideo) {
+    updateTextureFromVideo(currentCursorVideo, cursorVideoTexture, { width: cursorWidth, height: cursorHeight });
+}
+
     
     // Render to the canvas using WebGPU
     renderFrame();
@@ -313,8 +343,8 @@ window.onload = async function () {
 
     canvas.addEventListener('mousemove', event => {
         // Normalize the mouse position
-        let x = event.clientX / canvas.width;
-        let y = event.clientY / canvas.height; 
+        let x = event.clientX  / canvas.width;
+        let y = event.clientY  / canvas.height; 
     
         // Update the buffer
         const mousePositionArray = new Float32Array([x, y]);
@@ -325,16 +355,13 @@ window.onload = async function () {
         );
     });
     
-    const playgraph = window.Playgraph.getPlaygraph('main');
-    const data = playgraph;
-    window.playgraph = data;
+    const playgraph = window.Playgraph.getPlaygraph('one').main;
+    window.mainVideoPlayer = new VideoPlayer(playgraph, defaultNextVideoStrategy);
+    window.mainVideoPlayer.currentNodeIndex = playgraph.nodes.length - 1;   
 
-    window.mainVideoPlayer = new VideoPlayer(data);
-    window.mainVideoPlayer.currentNodeIndex = data.nodes.length - 1;   
-
-    // needs to be cursorPlaygraph
-    // window.cursorVideoPlayer = new VideoPlayer(data);
-    // window.cursorVideoPlayer.currentNodeIndex = data.nodes.length - 1;
+    const cursorPlaygraph = window.Playgraph.getPlaygraph('one').cursor;
+    window.cursorVideoPlayer = new VideoPlayer(cursorPlaygraph, defaultCursorNextVideoStrategy);
+    window.cursorVideoPlayer.currentNodeIndex = 0;
 
     // Add listeners for various user interactions
     document.addEventListener('click',  function playOnInteraction() {
@@ -342,11 +369,18 @@ window.onload = async function () {
         if (window.mainVideoPlayer.videoA.readyState > 3) {
             window.mainVideoPlayer.videoA.play();
             // Preload next video
-            const nextVideoPath = window.mainVideoPlayer.getNextVideoPathAndNode(window.mainVideoPlayer.videoA);
+            const nextVideoPath = window.mainVideoPlayer.getNextVideoStrategy(window.mainVideoPlayer.videoA);
             window.mainVideoPlayer.videoB.src = nextVideoPath;
             window.mainVideoPlayer.videoB.load();
             // Remove this listener since the video has started
             document.removeEventListener('click', playOnInteraction);
+        }
+        if (window.cursorVideoPlayer.videoA.readyState > 3) {
+            window.cursorVideoPlayer.videoA.play();
+            // Preload next video
+            const nextVideoPath = window.cursorVideoPlayer.getNextVideoStrategy(window.cursorVideoPlayer.videoA);
+            window.cursorVideoPlayer.videoB.src = nextVideoPath;
+            window.cursorVideoPlayer.videoB.load();
         }
     });
 
@@ -355,15 +389,65 @@ window.onload = async function () {
         // Update the display when the page loads
     });
 
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowLeft') {
+            window.cursorState = 'next';
+        }
+        // Update the display when the page loads
+    });
     // Initialize WebGPU rendering here or set up a rendering loop
     renderFrame();
-    
 };
 
+function defaultCursorNextVideoStrategy(currentVideo) {
+    const currentNode =this.playgraph.nodes[this.currentNodeIndex];
+    const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
+    let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
+
+    // Select the next edge based on the global cursorState variable
+    const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(window.cursorState));
+    if (nextEdges.length > 0) {
+        nextEdgeIndex = currentNode.edges.indexOf(nextEdges[0]);
+    }
+
+    const nextVideoPath = `/main/${currentNode.edges[nextEdgeIndex].id}`;
+
+    // Update the current node index if we transitioned to a different node
+    const nextNodeId = currentNode.edges[nextEdgeIndex].to;
+    const nextNodeIndex = this.playgraph.nodes.findIndex(node => node.id === nextNodeId);
+    if (nextNodeIndex !== -1) {
+        this.currentNodeIndex = nextNodeIndex;
+    }
+    return nextVideoPath;
+}
+
+function defaultNextVideoStrategy(currentVideo) {
+    const currentNode =this.playgraph.nodes[this.currentNodeIndex];
+    const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
+    let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
+
+    // Select the next edge based on the global userInput variable
+    const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(window.userInput));
+    if (nextEdges.length > 0) {
+        nextEdgeIndex = currentNode.edges.indexOf(nextEdges[0]);
+    }
+
+    const nextVideoPath = `/main/${currentNode.edges[nextEdgeIndex].id}`;
+
+    // Update the current node index if we transitioned to a different node
+    const nextNodeId = currentNode.edges[nextEdgeIndex].to;
+    const nextNodeIndex = this.playgraph.nodes.findIndex(node => node.id === nextNodeId);
+    if (nextNodeIndex !== -1) {
+        this.currentNodeIndex = nextNodeIndex;
+    }
+
+    return nextVideoPath;
+}
 
 class VideoPlayer {
-    constructor(playgraph) {
+    constructor(playgraph, getNextVideoStrategy) {
         this.playgraph = playgraph;
+        this.getNextVideoStrategy = getNextVideoStrategy.bind(this);
         this.blocked = false; // Initially, the player is not blocked
         this.videoA = this.createVideoElement();
         this.videoB = this.createVideoElement();
@@ -380,34 +464,11 @@ class VideoPlayer {
         // document.body.appendChild(videoElem); // This is needed to make sure the video elements are in the DOM. If not needed, you can remove this line.
         return videoElem;
     }
-
-    getNextVideoPathAndNode(currentVideo) {
-        const currentNode =this.playgraph.nodes[this.currentNodeIndex];
-        const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
-        let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
-    
-        // Select the next edge based on the global userInput variable
-        const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(window.userInput));
-        if (nextEdges.length > 0) {
-            nextEdgeIndex = currentNode.edges.indexOf(nextEdges[0]);
-        }
-    
-        const nextVideoPath = `/main/${currentNode.edges[nextEdgeIndex].id}`;
-    
-        // Update the current node index if we transitioned to a different node
-        const nextNodeId = currentNode.edges[nextEdgeIndex].to;
-        const nextNodeIndex = this.playgraph.nodes.findIndex(node => node.id === nextNodeId);
-        if (nextNodeIndex !== -1) {
-            this.currentNodeIndex = nextNodeIndex;
-        }
-    
-        return nextVideoPath;
-    }
-    
+  
     switchVideos(currentVideo, nextVideo) {
         if (this.blocked) return;
     
-        const nextVideoPath = this.getNextVideoPathAndNode(currentVideo);
+        const nextVideoPath = this.getNextVideoStrategy(currentVideo);
     
         this.updateVideoNameDisplay(nextVideoPath);
     
@@ -433,7 +494,9 @@ class VideoPlayer {
         };
     
         // Reset userInput to 'idle' after selecting an edge
+        // TODO THIS NEEDS TO BE made abstract
         window.userInput = 'idle';
+        window.cursorState = 'idle';
         updateUserInputDisplay();
     }
     
