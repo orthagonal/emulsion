@@ -1,30 +1,28 @@
+// global variables
 const screenWidth = 1920.0;
 const screenHeight = 1080.0;
-const cursorWidth = 64.0;
-const cursorHeight = 64.0;
-
+const cursorWidth = 128.0;
+const cursorHeight = 128.0;
 
 // current user input state:
 window.userInput = 'idle';
 window.cursorState = 'idle';
 
-// Function to update the display of the current user input
-function updateUserInputDisplay() {
-    document.getElementById('userInputDisplay').innerText = `User Input: ${window.userInput}`;
-}
-
 // WebGPU Variables
-let adapter;
-let device;
-let canvas;
-let context;
-let pipeline;
+let adapter, device, canvas, context;
+let mousePositionBuffer, constantsBuffer;
+let videoTexture, cursorVideoTexture;
 let bindGroup;
-let videoTexture;
-let cursorVideoTexture;
-let mousePositionBuffer;
+let mainVideoPipeline, cursorPipeline;  // Pipeline for rendering the video
+let videoBindGroup;  // BindGroup for rendering the video
+let cursorBindGroup;  // BindGroup for rendering the cursor
+let currentCursor = null;
+let linearSampler = null;
+let fragmentShaderModules = {};
 
 
+
+let defaultCursor, alphaCursor;
 
 const vertexShaderCode = `
 struct VertexOutput {
@@ -55,7 +53,18 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 }
 `;
 
-const fragmentShaderCode = `
+const mainFragmentShaderCode = `
+@group(0) @binding(0) var mySampler: sampler;
+@group(0) @binding(1) var myTexture: texture_2d<f32>;
+
+@fragment
+fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
+    return textureSampleBaseClampToEdge(myTexture, mySampler, fragUV);
+}
+
+`;
+
+const cursorFragmentShaderCode = `
 struct MouseUniform {
     mousePosition: vec2<f32>
 };
@@ -68,56 +77,188 @@ struct Constants {
 };
 
 @group(0) @binding(0) var mySampler: sampler;
-@group(0) @binding(1) var myTexture: texture_2d<f32>;
-@group(0) @binding(2) var smallSampler: sampler;
-@group(0) @binding(3) var smallTexture: texture_2d<f32>;
-@group(0) @binding(4) var<uniform> mousePosition: MouseUniform;
-@group(0) @binding(5) var<uniform> constants: Constants;
+@group(0) @binding(1) var smallTexture: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> mousePosition: MouseUniform;
+@group(0) @binding(3) var<uniform> constants: Constants;
+
 @fragment
 fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
-    // sample the main texture
-    var mainColor = textureSampleBaseClampToEdge(myTexture, mySampler, fragUV);
-
-    // calculate half width and half height for the cursor
     var halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
     var halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
-
-    // calculate the boundaries for the cursor based on mouse position
     var leftBoundary = mousePosition.mousePosition.x - halfCursorWidth;
     var rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
     var yOffset = 1.0 * halfCursorHeight;
     var bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight - yOffset;
     var topBoundary = mousePosition.mousePosition.y + halfCursorHeight - yOffset; 
 
-    var isWithinSmallTexture = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
-                               fragUV.y > bottomBoundary && fragUV.y < topBoundary;
+    var isWithinCursor = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
+                         fragUV.y > bottomBoundary && fragUV.y < topBoundary;
 
-    if (isWithinSmallTexture) {
-        // adjust the fragUV to sample correctly from the smaller texture
+    if (isWithinCursor) {
         var adjustedUV = vec2<f32>(
             (fragUV.x - leftBoundary) / (2.0 * halfCursorWidth), 
-            1.0 - (fragUV.y - bottomBoundary) / (2.0 * halfCursorHeight)  // flip the y-coordinate here
+            1.0 - (fragUV.y - bottomBoundary) / (2.0 * halfCursorHeight)
         );
-        
-        var smallColor = textureSampleBaseClampToEdge(smallTexture, smallSampler, adjustedUV);
+        return textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
+    }
+    return vec4<f32>(0.0, 0.0, 0.0, 0.0); // Return transparent color outside cursor region
+}
 
-        // Check for alpha or absolute black pixel
-        if (smallColor.a == 0.0 || (smallColor.r == 0.0 && smallColor.g == 0.0 && smallColor.b == 0.0)) {
-            return mainColor;
-        } else {
-            return smallColor;
+`;
+
+const alphaFragmentShaderCode = `
+struct MouseUniform {
+    mousePosition: vec2<f32>
+};
+
+struct Constants {
+    screenWidth: f32,
+    screenHeight: f32,
+    cursorWidth: f32,
+    cursorHeight: f32
+};
+
+@group(0) @binding(0) var mySampler: sampler;
+@group(0) @binding(1) var smallTexture: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> mousePosition: MouseUniform;
+@group(0) @binding(3) var<uniform> constants: Constants;
+
+@fragment
+fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
+    var halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
+    var halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
+    var leftBoundary = mousePosition.mousePosition.x - halfCursorWidth;
+    var rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
+    var yOffset = 1.0 * halfCursorHeight;
+    var bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight - yOffset;
+    var topBoundary = mousePosition.mousePosition.y + halfCursorHeight - yOffset; 
+
+    var isWithinCursor = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
+                         fragUV.y > bottomBoundary && fragUV.y < topBoundary;
+
+    if (isWithinCursor) {
+        var adjustedUV = vec2<f32>(
+            (fragUV.x - leftBoundary) / (2.0 * halfCursorWidth), 
+            1.0 - (fragUV.y - bottomBoundary) / (2.0 * halfCursorHeight)
+        );
+        return textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
+    }
+    return vec4<f32>(0.0, 0.0, 0.0, 0.0); // Return transparent color outside cursor region
+}
+
+`;
+
+
+// src/trailer/src.js
+class CursorPlugin {
+    constructor(videoTexture, fragmentShader, eventHandlers) {
+        this.videoTexture = videoTexture;
+        this.fragmentShader = fragmentShader;
+        this.eventHandlers = eventHandlers;
+        this.playgraph = null;  // Placeholder, you can define the playgraph mechanism here       
+        this.currentVideo = null;
+    }
+
+    static setCursor(cursor) {
+        if (currentCursor) {
+            currentCursor.detachEventHandlers(canvas);
+        }
+
+        currentCursor = cursor;
+        cursor.attachEventHandlers(canvas);
+        // TODO: Use cursor's videoTexture and fragmentShader to update the rendering process
+    }
+
+    setPlaygraph(playgraph) {
+        this.playgraph = playgraph;
+    }
+
+    attachEventHandlers(element) {
+        for (let event in this.eventHandlers) {
+            element.addEventListener(event, this.eventHandlers[event]);
         }
     }
 
-    return mainColor;
+    detachEventHandlers(element) {
+        for (let event in this.eventHandlers) {
+            element.removeEventListener(event, this.eventHandlers[event]);
+        }
+    }
 }
-`;
 
+
+function setCursor(cursorType) {
+    if (cursorType === 'default') {
+        CursorPlugin.setCursor(defaultCursor);
+        cursorVideoTexture = device.createTexture({
+            size: { width: cursorWidth, height: cursorHeight, depthOrArrayLayers: 1 },
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
+        });
+        createPipeline('default');
+    } else if (cursorType === 'alpha') {
+        CursorPlugin.setCursor(alphaCursor);
+        cursorVideoTexture = device.createTexture({
+            size: { width: cursorWidth, height: cursorHeight, depthOrArrayLayers: 1 },
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
+        });
+        createPipeline('cursor2');
+    } else {
+        console.error(`Unknown cursor type: ${cursorType}`);
+    }
+}
+
+let currentCursorType = 'default'; // Initial state
+
+document.addEventListener('keydown', function (event) {
+    if (event.key === 'c') {
+        if (currentCursorType === 'default') {
+            setCursor('alpha');
+            currentCursorType = 'alpha';
+        } else {
+            setCursor('default');
+            currentCursorType = 'default';
+        }
+    }
+});
+
+// Default cursor event handlers
+const defaultCursorEventHandlers = {
+    mousemove: event => {
+        // Normalize the mouse position
+        let x = event.clientX / canvas.width;
+        let y = event.clientY / canvas.height;
+
+        // Update the buffer
+        const mousePositionArray = new Float32Array([x, y]);
+        device.queue.writeBuffer(
+            mousePositionBuffer,
+            0,
+            mousePositionArray.buffer
+        );
+    },
+    click: event => {
+        window.cursorState = 'next';
+    },
+    keydown: event => {
+        // if they hit the 'n' button set to next
+        if (event.key === 'n') {
+            window.userInput = 'next';
+        }
+    }
+};
+
+
+// Function to update the display of the current user input
+function updateUserInputDisplay() {
+    document.getElementById('userInputDisplay').innerText = `User Input: ${window.userInput}`;
+}
 
 async function initWebGPU() {
     adapter = await navigator.gpu.requestAdapter();
     device = await adapter.requestDevice();
-    
+
     canvas = document.getElementById("webgpuCanvas");
     let dpr = window.devicePixelRatio;
     canvas.width = window.innerWidth * dpr;
@@ -125,86 +266,120 @@ async function initWebGPU() {
     canvas.style.width = `${window.innerWidth}px`;
     canvas.style.height = `${window.innerHeight}px`;
 
-    context = canvas.getContext("webgpu");
+    context = canvas.getContext("webgpu", { alpha: true });
 
     mousePositionBuffer = device.createBuffer({
         size: 8,  // 2 float32 values: x and y
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
-    const constantsBuffer = device.createBuffer({
+    constantsBuffer = device.createBuffer({
         size: 4 * 4,  // 4 constants of 4 bytes (float) each
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
-    
-    // Write values to the buffer
+
     device.queue.writeBuffer(
         constantsBuffer,
         0,
         new Float32Array([screenWidth, screenHeight, cursorWidth, cursorHeight]).buffer
     );
-    
+
     videoTexture = device.createTexture({
-        size: { width: screenWidth  , height: screenHeight, depthOrArrayLayers: 1 },
+        size: { width: screenWidth, height: screenHeight, depthOrArrayLayers: 1 },
         format: 'rgba8unorm',
         usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
     });
 
-    const sampler = device.createSampler({
+    cursorVideoTexture = device.createTexture({
+        size: { width: cursorWidth, height: cursorHeight, depthOrArrayLayers: 1 },
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
+    });
+
+    linearSampler = device.createSampler({
         magFilter: 'linear',
         minFilter: 'linear',
     });
 
-    const vertexShaderModule = device.createShaderModule({
+    fragmentShaderModules.main = device.createShaderModule({
+        code: mainFragmentShaderCode
+    });
+
+    fragmentShaderModules.defaultVertex = device.createShaderModule({
         code: vertexShaderCode
     });
-
-    const fragmentShaderModule = device.createShaderModule({
-        code: fragmentShaderCode
+    fragmentShaderModules.default = device.createShaderModule({
+        code: cursorFragmentShaderCode
+    });
+    fragmentShaderModules.cursor1 = device.createShaderModule({
+        code: cursorFragmentShaderCode
+    });
+    fragmentShaderModules.cursor2 = device.createShaderModule({
+        code: alphaFragmentShaderCode
     });
 
-    pipeline = device.createRenderPipeline({
+    createPipeline('default');
+}
+
+let mainBGL;
+let cursorBGL;
+
+function createPipeline(cursorType) {
+    mainBGL = device.createBindGroupLayout({
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+            { binding: 2, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
+        ]
+    });
+    mainVideoPipeline = device.createRenderPipeline({
         layout: device.createPipelineLayout({
-            bindGroupLayouts: [device.createBindGroupLayout({
-                entries: [
-                    {
-                        binding: 0,
-                        visibility: GPUShaderStage.FRAGMENT,
-                        sampler: {
-                            type: 'filtering'
-                        }
-                    },
-                    {
-                        binding: 1,
-                        visibility: GPUShaderStage.FRAGMENT,
-                        texture: {
-                            sampleType: 'float'
-                        }
-                    },
-                    { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-                    { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: {} },
-                    {
-                        binding: 4,  // Assuming bindings 0-3 are for your samplers and textures
-                        visibility: GPUShaderStage.FRAGMENT,
-                        buffer: { type: 'uniform' }
-                    },
-                    {
-                        binding: 5,
-                        visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX,
-                        buffer: { type: 'uniform' }
-                    }
-                ]
-            })]
+            bindGroupLayouts: [mainBGL],            
+            // bindGroupLayouts: [device.createBindGroupLayout({
+            //     entries: [
+            //         {
+            //             binding: 0,
+            //             visibility: GPUShaderStage.FRAGMENT,
+            //             sampler: {
+            //                 type: 'filtering'
+            //             }
+            //         },
+            //         {
+            //             binding: 1,
+            //             visibility: GPUShaderStage.FRAGMENT,
+            //             texture: {
+            //                 sampleType: 'float'
+            //             }
+            //         },
+            //         {
+            //             binding: 2,
+            //             visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX,
+            //             buffer: { type: 'uniform' }
+            //         }
+            //     ]
+            // })],
         }),
         vertex: {
-            module: vertexShaderModule,
+            module: fragmentShaderModules.defaultVertex,
             entryPoint: 'main'
         },
         fragment: {
-            module: fragmentShaderModule,
+            module: fragmentShaderModules.main,
             entryPoint: 'main',
             targets: [{
-                format: 'bgra8unorm'
+                format: 'rgba8unorm',
+                blend: {
+                    alpha: {
+                        operation: 'add',
+                        srcFactor: 'src-alpha',
+                        dstFactor: 'one-minus-src-alpha'
+                    },
+                    color: {
+                        operation: 'add',
+                        srcFactor: 'src-alpha',
+                        dstFactor: 'one-minus-src-alpha'
+                    }
+                }
             }]
         },
         primitive: {
@@ -213,43 +388,69 @@ async function initWebGPU() {
         },
     });
 
-    cursorVideoTexture = device.createTexture({
-        size: { width: 64, height: 64, depthOrArrayLayers: 1 },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
-    });
-    
-    bindGroup = device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
+    cursorBGL = device.createBindGroupLayout({
         entries: [
-            {
-                binding: 0,
-                resource: sampler
-            },
-            {
-                binding: 1,
-                resource: videoTexture.createView()
-            },
-            {
-                binding: 2,
-                resource: sampler  // reusing the same sampler for the small texture
-            },
-            {
-                binding: 3,
-                resource: cursorVideoTexture.createView()
-            },
-            {
-                binding: 4,
-                resource: {
-                    buffer: mousePositionBuffer,
+            { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+            { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+            { binding: 3, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
+        ]
+    });
+    cursorPipeline = device.createRenderPipeline({
+        layout: device.createPipelineLayout({
+            bindGroupLayouts: [ cursorBGL ],
+        }),
+        vertex: {
+            module: fragmentShaderModules.defaultVertex,
+            entryPoint: 'main'
+        },
+        fragment: {
+            module: fragmentShaderModules[cursorType],
+            entryPoint: 'main',
+            targets: [{
+                format: 'rgba8unorm',
+                blend: {
+                    alpha: {
+                        operation: 'add',
+                        srcFactor: 'src-alpha',
+                        dstFactor: 'one-minus-src-alpha'
+                    },
+                    color: {
+                        operation: 'add',
+                        srcFactor: 'src-alpha',
+                        dstFactor: 'one-minus-src-alpha'
+                    }
                 }
-            },
-            {
-                binding: 5,
-                resource: {
-                    buffer: constantsBuffer,
-                },
-            },
+            }]
+        },
+        primitive: {
+            topology: 'triangle-strip',
+            stripIndexFormat: 'uint32'
+        },
+    });
+
+    createBindGroups();
+
+}
+
+function createBindGroups() {
+    // Create bind group for rendering the video
+    videoBindGroup = device.createBindGroup({
+        layout: mainBGL,
+        entries: [
+            { binding: 0, resource: linearSampler },
+            { binding: 1, resource: videoTexture.createView() },
+            { binding: 2, resource: { buffer: constantsBuffer } }
+        ]
+    });
+
+    cursorBindGroup = device.createBindGroup({
+        layout: cursorBGL,
+        entries: [
+            { binding: 0, resource: linearSampler },
+            { binding: 1, resource: cursorVideoTexture.createView() },
+            { binding: 2, resource: { buffer: mousePositionBuffer } },
+            { binding: 3, resource: { buffer: constantsBuffer } }
         ]
     });
 }
@@ -276,8 +477,8 @@ function updateTextureFromVideo(videoElement, targetTexture, dimensions) {
 async function renderFrame() {
     let mouseX = 0;
     let mouseY = 0;
-    
-    const swapChainFormat = 'bgra8unorm';
+
+    const swapChainFormat = 'rgba8unorm';
     context.configure({
         device: device,
         format: swapChainFormat
@@ -293,47 +494,48 @@ async function renderFrame() {
             loadValue: 'clear',
         }],
     };
-
-
     const commandEncoder = device.createCommandEncoder();
     const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-    passEncoder.setPipeline(pipeline);
-    passEncoder.setBindGroup(0, bindGroup);
+
+    passEncoder.setPipeline(mainVideoPipeline);
+    passEncoder.setBindGroup(0, videoBindGroup);
     passEncoder.draw(4, 1, 0, 0);
-    passEncoder.end(); 
+
+    passEncoder.setPipeline(cursorPipeline);
+    passEncoder.setBindGroup(0, cursorBindGroup);
+    passEncoder.draw(4, 1, 0, 0);
+
+    passEncoder.end();
     device.queue.submit([commandEncoder.finish()]);
 }
 
 function renderLoop() {
     // Determine the video currently playing
-  // Main video player logic
-let currentMainVideo;
-if (window.mainVideoPlayer.videoA.currentTime > 0 && !window.mainVideoPlayer.videoA.paused && !window.mainVideoPlayer.videoA.ended) {
-    currentMainVideo = window.mainVideoPlayer.videoA;
-} else if (window.mainVideoPlayer.videoB.currentTime > 0 && !window.mainVideoPlayer.videoB.paused && !window.mainVideoPlayer.videoB.ended) {
-    currentMainVideo = window.mainVideoPlayer.videoB;
-}
+    // Main video player logic
+    let currentMainVideo;
+    if (window.mainVideoPlayer.videoA.currentTime > 0 && !window.mainVideoPlayer.videoA.paused && !window.mainVideoPlayer.videoA.ended) {
+        currentMainVideo = window.mainVideoPlayer.videoA;
+    } else if (window.mainVideoPlayer.videoB.currentTime > 0 && !window.mainVideoPlayer.videoB.paused && !window.mainVideoPlayer.videoB.ended) {
+        currentMainVideo = window.mainVideoPlayer.videoB;
+    }
 
-// Cursor video player logic
-let currentCursorVideo;
-if (window.cursorVideoPlayer.videoA.currentTime > 0 && !window.cursorVideoPlayer.videoA.paused && !window.cursorVideoPlayer.videoA.ended) {
-    currentCursorVideo = window.cursorVideoPlayer.videoA;
-} else if (window.cursorVideoPlayer.videoB.currentTime > 0 && !window.cursorVideoPlayer.videoB.paused && !window.cursorVideoPlayer.videoB.ended) {
-    currentCursorVideo = window.cursorVideoPlayer.videoB;
-}
+    // Cursor video player logic
+    let currentCursorVideo;
+    if (window.cursorVideoPlayer.videoA.currentTime > 0 && !window.cursorVideoPlayer.videoA.paused && !window.cursorVideoPlayer.videoA.ended) {
+        currentCursorVideo = window.cursorVideoPlayer.videoA;
+    } else if (window.cursorVideoPlayer.videoB.currentTime > 0 && !window.cursorVideoPlayer.videoB.paused && !window.cursorVideoPlayer.videoB.ended) {
+        currentCursorVideo = window.cursorVideoPlayer.videoB;
+    }
 
-// Update textures
-if (currentMainVideo) {
-    updateTextureFromVideo(currentMainVideo, videoTexture, { width: screenWidth, height: screenHeight });
-}
-if (currentCursorVideo) {
-    updateTextureFromVideo(currentCursorVideo, cursorVideoTexture, { width: cursorWidth, height: cursorHeight });
-}
-
-    
+    // Update textures
+    if (currentMainVideo) {
+        updateTextureFromVideo(currentMainVideo, videoTexture, { width: screenWidth, height: screenHeight });
+    }
+    if (currentCursorVideo) {
+        updateTextureFromVideo(currentCursorVideo, cursorVideoTexture, { width: cursorWidth, height: cursorHeight });
+    }
     // Render to the canvas using WebGPU
     renderFrame();
-    
     // Call this function continuously to keep updating
     requestAnimationFrame(renderLoop);
 }
@@ -341,30 +543,27 @@ if (currentCursorVideo) {
 window.onload = async function () {
     await initWebGPU();
 
-    canvas.addEventListener('mousemove', event => {
-        // Normalize the mouse position
-        let x = event.clientX  / canvas.width;
-        let y = event.clientY  / canvas.height; 
-    
-        // Update the buffer
-        const mousePositionArray = new Float32Array([x, y]);
-        device.queue.writeBuffer(
-            mousePositionBuffer,
-            0,
-            mousePositionArray.buffer
-        );
-    });
-    
-    const playgraph = window.Playgraph.getPlaygraph('one').main;
-    window.mainVideoPlayer = new VideoPlayer(playgraph, defaultNextVideoStrategy);
-    window.mainVideoPlayer.currentNodeIndex = playgraph.nodes.length - 1;   
-
+    // Create the default cursor using the cursor plugin class
     const cursorPlaygraph = window.Playgraph.getPlaygraph('one').cursor;
+    defaultCursor = new CursorPlugin(cursorVideoTexture, cursorFragmentShaderCode, defaultCursorEventHandlers);
+    defaultCursor.setPlaygraph(cursorPlaygraph);
+
+    const alphaCursorPlaygraph = window.Playgraph.getPlaygraph('one').cursor;
+    alphaCursor = new CursorPlugin(cursorVideoTexture, alphaFragmentShaderCode, defaultCursorEventHandlers);
+    alphaCursor.setPlaygraph(alphaCursorPlaygraph);
+
+    // Set this default cursor as the current cursor
+    CursorPlugin.setCursor(alphaCursor);
+    // CursorPlugin.setCursor(defaultCursor);
     window.cursorVideoPlayer = new VideoPlayer(cursorPlaygraph, defaultCursorNextVideoStrategy);
     window.cursorVideoPlayer.currentNodeIndex = 0;
 
+    const playgraph = window.Playgraph.getPlaygraph('one').main;
+    window.mainVideoPlayer = new VideoPlayer(playgraph, defaultNextVideoStrategy);
+    window.mainVideoPlayer.currentNodeIndex = playgraph.nodes.length - 1;
+    let bothVideosLoaded = 0;
     // Add listeners for various user interactions
-    document.addEventListener('click',  function playOnInteraction() {
+    document.addEventListener('click', function playOnInteraction() {
         renderLoop();
         if (window.mainVideoPlayer.videoA.readyState > 3) {
             window.mainVideoPlayer.videoA.play();
@@ -373,7 +572,9 @@ window.onload = async function () {
             window.mainVideoPlayer.videoB.src = nextVideoPath;
             window.mainVideoPlayer.videoB.load();
             // Remove this listener since the video has started
-            document.removeEventListener('click', playOnInteraction);
+            if (++bothVideosLoaded === 2) {
+                document.removeEventListener('click', playOnInteraction);
+            }
         }
         if (window.cursorVideoPlayer.videoA.readyState > 3) {
             window.cursorVideoPlayer.videoA.play();
@@ -381,26 +582,16 @@ window.onload = async function () {
             const nextVideoPath = window.cursorVideoPlayer.getNextVideoStrategy(window.cursorVideoPlayer.videoA);
             window.cursorVideoPlayer.videoB.src = nextVideoPath;
             window.cursorVideoPlayer.videoB.load();
+            if (++bothVideosLoaded === 2) {
+                document.removeEventListener('click', playOnInteraction);
+            }
         }
     });
-
-    document.addEventListener('keydown', (event) => {
-        window.userInput = 'next';
-        // Update the display when the page loads
-    });
-
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'ArrowLeft') {
-            window.cursorState = 'next';
-        }
-        // Update the display when the page loads
-    });
-    // Initialize WebGPU rendering here or set up a rendering loop
     renderFrame();
 };
 
 function defaultCursorNextVideoStrategy(currentVideo) {
-    const currentNode =this.playgraph.nodes[this.currentNodeIndex];
+    const currentNode = this.playgraph.nodes[this.currentNodeIndex];
     const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
     let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
 
@@ -422,7 +613,7 @@ function defaultCursorNextVideoStrategy(currentVideo) {
 }
 
 function defaultNextVideoStrategy(currentVideo) {
-    const currentNode =this.playgraph.nodes[this.currentNodeIndex];
+    const currentNode = this.playgraph.nodes[this.currentNodeIndex];
     const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
     let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
 
@@ -464,42 +655,42 @@ class VideoPlayer {
         // document.body.appendChild(videoElem); // This is needed to make sure the video elements are in the DOM. If not needed, you can remove this line.
         return videoElem;
     }
-  
+
     switchVideos(currentVideo, nextVideo) {
         if (this.blocked) return;
-    
+
         const nextVideoPath = this.getNextVideoStrategy(currentVideo);
-    
+
         this.updateVideoNameDisplay(nextVideoPath);
-    
+
         // Play the next video
         nextVideo.src = nextVideoPath;
         nextVideo.oncanplaythrough = () => {
             nextVideo.play();
-    
+
             // If the previous video was in fullscreen, make sure the next video also enters fullscreen
             if (document.fullscreenElement) {
                 nextVideo.requestFullscreen().catch(err => {
                     console.error(`Error attempting to enable fullscreen mode: ${err.message} (${err.name})`);
                 });
             }
-    
+
             // Determine the subsequent video and preload it
             const subsequentVideo = (nextVideo === this.videoA) ? this.videoB : this.videoA;
             subsequentVideo.src = currentVideo.src; // Set the subsequent video's src to the current video's src
             subsequentVideo.load();
-    
+
             // Remove the oncanplaythrough event handler
             nextVideo.oncanplaythrough = null;
         };
-    
+
         // Reset userInput to 'idle' after selecting an edge
         // TODO THIS NEEDS TO BE made abstract
         window.userInput = 'idle';
         window.cursorState = 'idle';
         updateUserInputDisplay();
     }
-    
+
     updateVideoNameDisplay(videoPath) {
         // Extract video name from the video path.
         // For example, if videoPath is "/main/someVideo.mp4", the name would be "someVideo.mp4"

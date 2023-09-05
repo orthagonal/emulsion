@@ -20,6 +20,6 @@
   <body>
     <div id="videoNameDisplay">Video Name: <span id="currentVideoName">Loading...</span></div>
     <div id="userInputDisplay">Loading...</div>
-    <canvas id="webgpuCanvas" width="1920" height="1080"></canvas>
+    <canvas id="webgpuCanvas" width="1920" height="1080" tabindex="0"></canvas>
   </body>
 </html>
